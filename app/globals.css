@@ -1,0 +1,109 @@
+/* Import Tailwind */
+@import "tailwindcss";
+
+/* ------------------------------------------------------ */
+/* 1. Root Variables (tema dasar website)                 */
+/* ------------------------------------------------------ */
+
+:root {
+  --background: linear-gradient(
+    135deg,
+    #50a3fb6d -20%,
+    #ffffff 55%,
+    #a667e46d 120%
+  );
+  --foreground: #344270; /* warna teks kamu */
+}
+
+/* Dark mode (opsional, tetap aman) */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+/* Tailwind theme extension inline */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+/* ------------------------------------------------------ */
+/* 2. Global body styling                                 */
+/* ------------------------------------------------------ */
+
+body {
+  background: var(--background);
+  background-attachment: fixed; /* biar smooth elegan */
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+  min-height: 100vh;
+}
+
+/* ------------------------------------------------------ */
+/* 3. Custom utility classes                              */
+/* ------------------------------------------------------ */
+
+/* Pastel button gradient (daftar penyelenggara) */
+.pastel-gradient {
+  background: linear-gradient(45deg, #ebdcff 0%, #d6e8ff 100%);
+}
+
+/* Body gradient (kalau mau override manual) */
+.body-gradient {
+  background: linear-gradient(
+    135deg,
+    #50a3fb6d -20%,
+    #ffffff 55%,
+    #a667e46d 120%
+  );
+  background-attachment: fixed;
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 1rem;
+  box-shadow: 0 18px 45px rgba(73, 94, 148, 0.18);
+  backdrop-filter: blur(20px);
+}
+
+/* optional animasi */
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.animate-float {
+  animation: float 18s ease-in-out infinite;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.6s ease-out both;
+}
+
+.text-brand-gradient {
+  background: linear-gradient(90deg, #50a3fb 0%, #bebffd 55%, #a667e4 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  color: transparent;
+}
