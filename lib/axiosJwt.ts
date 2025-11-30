@@ -1,41 +1,33 @@
-// src/lib/axiosJwt.ts
 import axios, {
   AxiosInstance,
   AxiosRequestHeaders,
   InternalAxiosRequestConfig,
 } from "axios";
-import { getAccessToken, getAccessTokenExp, clearAccessToken } from "./token";
+import { getAccessToken, clearAccessToken } from "./token"; // Hapus getAccessTokenExp
 
 const API_SERVER = process.env.NEXT_PUBLIC_API_SERVER;
-
-if (!API_SERVER) {
-  console.warn("NEXT_PUBLIC_API_SERVER belum diset");
-}
 
 export function createAxiosJWT(): AxiosInstance {
   const axiosJWT = axios.create({
     baseURL: API_SERVER,
-    withCredentials: true, // biar cookie juga ikut kalau nanti kepakai
+    withCredentials: true,
   });
 
   axiosJWT.interceptors.request.use(
     (config: InternalAxiosRequestConfig) => {
-      const now = Date.now();
+      // PERBAIKAN: Ambil token saja
       const token = getAccessToken();
-      const exp = getAccessTokenExp();
 
       if (!config.headers) {
         config.headers = {} as AxiosRequestHeaders;
       }
 
-      // Token masih valid → pakai
-      if (token && exp && now < exp) {
+      // Selalu kirim header jika token ada
+      // Biarkan Backend yang menentukan token itu expired atau tidak (via respons 401)
+      if (token) {
         (
           config.headers as AxiosRequestHeaders
         ).Authorization = `Bearer ${token}`;
-      } else {
-        // token ga ada / expired → buang dari localStorage
-        clearAccessToken();
       }
 
       return config;
@@ -46,8 +38,12 @@ export function createAxiosJWT(): AxiosInstance {
   axiosJWT.interceptors.response.use(
     (res) => res,
     (error) => {
+      // Jika Backend bilang 401 (Token Salah/Expired), baru kita logout di frontend
       if (error.response?.status === 401) {
         clearAccessToken();
+        if (typeof window !== "undefined") {
+          window.location.href = "/auth?login";
+        }
       }
       return Promise.reject(error);
     }

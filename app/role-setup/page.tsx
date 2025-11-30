@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { checkUser, setMyRole } from "@/app/actions/auth";
 import { applyOrganizer } from "@/app/actions/organizer";
 import type { Users } from "@/lib/definitions";
+import { clearAccessToken } from "@/lib/token";
 
 type Step = "choose-role" | "organizer-form" | "submitted";
 
@@ -38,28 +39,36 @@ export default function RoleSetupPage() {
   });
   const [errors, setErrors] = useState<OrganizerFormErrors>({});
 
-  // 1️⃣ Cek user & role
+  // Bagian useEffect di app/role-setup/page.tsx
+
   useEffect(() => {
     const init = async () => {
       try {
         const u = await checkUser(); // GET /api/users/admin
+
+        // PERBAIKAN: Jika u null (misal karena 401 tertangkap tapi return null),
+        // kita paksa logout
+        if (!u) {
+          throw new Error("User data is empty");
+        }
+
         setUser(u);
 
         if (u.role === "staff") {
-          router.replace("/dashboard-staff"); // sesuaikan
+          router.replace("/dashboard");
           return;
         }
         if (u.role === "admin") {
-          // TODO: idealnya cek status organizer di sini (pending/approved)
-          router.replace("/dashboard"); // sesuaikan
+          router.replace("/dashboard");
           return;
         }
-
-        // kalau role null → lanjut tampilkan halaman ini
       } catch (err) {
-        // belum login → balikin ke /auth
+        console.error("Gagal memuat sesi:", err);
+
+        // PENTING: Hapus token supaya tidak looping saat dilempar ke login
+        clearAccessToken();
+
         router.replace("/auth?login");
-        return;
       } finally {
         setLoadingUser(false);
       }
@@ -186,7 +195,9 @@ export default function RoleSetupPage() {
               disabled={submitting}
               className="text-left rounded-2xl border border-slate-200 bg-slate-50/70 hover:bg-slate-100 transition p-5 flex flex-col gap-2 disabled:opacity-60"
             >
-              <h2 className="font-semibold text-slate-900">Saya Staff/Peserta</h2>
+              <h2 className="font-semibold text-slate-900">
+                Saya Staff/Peserta
+              </h2>
               <p className="text-sm text-slate-600">
                 Akses fitur sebagai staff atau peserta: lihat event, cek
                 sertifikat, dan fitur-fitur non-penyelenggara lainnya.
