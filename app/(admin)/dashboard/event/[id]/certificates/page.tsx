@@ -1,35 +1,19 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useState, FormEvent } from "react";
+import {
+  useState,
+  FormEvent,
+  DragEvent,
+  ChangeEvent,
+} from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
   ImageIcon,
   Info,
-  Type,
-  Hash,
-  QrCode,
-  Bold,
-  Italic,
+  Download as DownloadIcon,
 } from "lucide-react";
-import { Rnd } from "react-rnd";
-
-type FontWeight = "400" | "600" | "700";
-
-interface TextBoxState {
-  x: number;
-  y: number;
-  fontSize: number;
-  fontWeight: FontWeight;
-  italic: boolean;
-}
-
-interface QrBoxState {
-  x: number;
-  y: number;
-  size: number;
-}
 
 const CertificateSettingsPage = () => {
   const params = useParams();
@@ -40,38 +24,14 @@ const CertificateSettingsPage = () => {
     title: "Workshop Digital Marketing 2025",
   };
 
-  const [backgroundUrl, setBackgroundUrl] = useState(
-    "https://images.pexels.com/photos/3760067/pexels-photo-3760067.jpeg?auto=compress&cs=tinysrgb&w=1200"
-  );
-
-  // Nama Peserta
-  const [nameBox, setNameBox] = useState<TextBoxState>({
-    x: 260,
-    y: 260,
-    fontSize: 28,
-    fontWeight: "600",
-    italic: false,
-  });
-
-  // Nomor Sertifikat
-  const [numberBox, setNumberBox] = useState<TextBoxState>({
-    x: 260,
-    y: 330,
-    fontSize: 14,
-    fontWeight: "400",
-    italic: false,
-  });
-
-  // QR Sertifikat
-  const [qrBox, setQrBox] = useState<QrBoxState>({
-    x: 800,
-    y: 360,
-    size: 120,
-  });
+  // File yang diupload + URL untuk preview
+  const [backgroundFile, setBackgroundFile] = useState<File | null>(null);
+  const [backgroundUrl, setBackgroundUrl] = useState<string | null>(null);
 
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [dragActive, setDragActive] = useState(false);
 
   const handleSave = (e: FormEvent) => {
     e.preventDefault();
@@ -79,22 +39,19 @@ const CertificateSettingsPage = () => {
     setSaving(true);
 
     const payload = {
-      backgroundUrl,
-      nameBox,
-      numberBox,
-      qrBox,
-      rules: {
-        requireAttendance: true,
-        requireFeedback: true,
-      },
+      // nanti diintegrasikan dengan upload ke storage
+      // sekarang masih dummy: kirim info kalau ada file
+      hasBackgroundFile: !!backgroundFile,
+      layout: "fixed-a4-landscape",
     };
 
     console.log("to-save certificate template", payload);
 
-    // TODO: kirim ke API
     setTimeout(() => {
       setSaving(false);
-      setMessage("Pengaturan sertifikat disimpan. (dummy)");
+      setMessage(
+        "Pengaturan sertifikat disimpan (dummy, file belum benar-benar diupload ke server)."
+      );
     }, 700);
   };
 
@@ -111,11 +68,45 @@ const CertificateSettingsPage = () => {
     }, 900);
   };
 
-  // Helper buat update angka bebas tapi tetap aman
-  const safeNumber = (value: string, fallback: number) => {
-    const n = Number(value);
-    if (!Number.isFinite(n) || n <= 0) return fallback;
-    return n;
+  const processFile = (file: File) => {
+    if (!file.type.startsWith("image/")) {
+      setMessage("File harus berupa gambar (PNG/JPG).");
+      return;
+    }
+
+    setBackgroundFile(file);
+    const objectUrl = URL.createObjectURL(file);
+    setBackgroundUrl(objectUrl);
+  };
+
+  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      processFile(file);
+    }
+  };
+
+  const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(true);
+  };
+
+  const handleDragLeave = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+  };
+
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      processFile(file);
+    }
   };
 
   return (
@@ -137,11 +128,12 @@ const CertificateSettingsPage = () => {
             Pengaturan Sertifikat
           </h1>
           <p className="text-sm md:text-[15px] text-[#34427099]">
-            Atur posisi{" "}
+            Layout sudah fix:{" "}
             <span className="font-semibold">
-              nama peserta, nomor sertifikat, dan QR verifikasi
+              nama besar di tengah, nomor sertifikat di bawahnya, QR di pojok
+              kanan bawah.
             </span>{" "}
-            di atas template A4 landscape.
+            Kamu hanya mengatur background dan menyimpan template.
           </p>
         </div>
 
@@ -173,9 +165,10 @@ const CertificateSettingsPage = () => {
       >
         <Info className="w-4 h-4 mt-[2px] text-[#50A3FB]" />
         <p>
-          Background sudah berisi desain fix (logo, penanggung jawab, dll). Di
-          sini kamu hanya mengatur <b>teks dinamis</b> dan <b>QR</b>. Teks
-          langsung nempel ke background tanpa box.
+          Background berisi desain fix (logo, penanggung jawab, tanda tangan,
+          dsb). CERMIN otomatis menambahkan{" "}
+          <b>nama peserta, nomor sertifikat, dan QR verifikasi</b> sesuai layout
+          bawaan A4 landscape.
         </p>
       </div>
 
@@ -183,7 +176,7 @@ const CertificateSettingsPage = () => {
         onSubmit={handleSave}
         className="grid lg:grid-cols-[1.5fr,1fr] gap-4 md:gap-6"
       >
-        {/* PREVIEW A4 LANDSCAPE */}
+        {/* PREVIEW A4 LANDSCAPE (LAYOUT FIX) */}
         <section
           className="
             rounded-3xl bg-white/90 border border-white/70
@@ -198,7 +191,8 @@ const CertificateSettingsPage = () => {
                 Preview Sertifikat (A4 Landscape)
               </h2>
               <p className="text-[11px] md:text-xs text-[#34427080]">
-                Drag teks dan QR di kanvas. Font size diatur dari panel kanan.
+                Layout teks & QR sudah dikunci. Background mengikuti gambar yang
+                kamu upload.
               </p>
             </div>
           </div>
@@ -210,7 +204,7 @@ const CertificateSettingsPage = () => {
                 rounded-3xl overflow-hidden
                 border border-[#E4E7F5]
                 bg-[#E5E7FEE6]
-                aspect-[297/210]  /* A4 landscape ratio */
+                aspect-[297/210]
               "
             >
               {/* Background */}
@@ -224,125 +218,55 @@ const CertificateSettingsPage = () => {
                   }}
                 />
               ) : (
-                <div className="absolute inset-0 flex flex-col items-center justify-center text-[#94A3B8] text-xs">
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-[#94A3B8] text-xs px-4 text-center">
                   <ImageIcon className="w-8 h-8 mb-2" />
-                  <span>Belum ada background. Isi URL di panel kanan.</span>
+                  <span>
+                    Belum ada background. Upload gambar di panel kanan
+                    (drag & drop / pilih file).
+                  </span>
                 </div>
               )}
 
               {/* Lapisan tipis */}
-              <div className="absolute inset-0 bg-white/10" />
+              <div className="absolute inset-0 bg-white/5" />
 
-              {/* Nama Peserta */}
-              <Rnd
-                bounds="parent"
-                enableResizing={false}
-                position={{ x: nameBox.x, y: nameBox.y }}
-                onDragStop={(_, d) =>
-                  setNameBox((prev) => ({
-                    ...prev,
-                    x: d.x,
-                    y: d.y,
-                  }))
-                }
-                className="cursor-move"
-              >
-                <div
-                  className="select-none"
-                  style={{
-                    fontSize: nameBox.fontSize,
-                    fontWeight: Number(nameBox.fontWeight),
-                    fontStyle: nameBox.italic ? "italic" : "normal",
-                    color: "#111827",
-                    whiteSpace: "nowrap",
-                    textAlign: "center",
-                  }}
-                >
+              {/* Nama & Nomor – CENTER tengah */}
+              <div className="absolute inset-0 flex flex-col items-center justify-center px-[10%]">
+                <div className="text-2xl md:text-3xl font-semibold text-[#111827] text-center">
                   Nama Peserta
                 </div>
-              </Rnd>
-
-              {/* Nomor Sertifikat */}
-              <Rnd
-                bounds="parent"
-                enableResizing={false}
-                position={{ x: numberBox.x, y: numberBox.y }}
-                onDragStop={(_, d) =>
-                  setNumberBox((prev) => ({
-                    ...prev,
-                    x: d.x,
-                    y: d.y,
-                  }))
-                }
-                className="cursor-move"
-              >
-                <div
-                  className="select-none"
-                  style={{
-                    fontSize: numberBox.fontSize,
-                    fontWeight: Number(numberBox.fontWeight),
-                    fontStyle: numberBox.italic ? "italic" : "normal",
-                    color: "#111827",
-                    whiteSpace: "nowrap",
-                    textAlign: "center",
-                  }}
-                >
+                <div className="mt-2 text-xs md:text-sm text-[#111827CC] text-center">
                   No. Sertifikat: CERMIN-2025-0001
                 </div>
-              </Rnd>
+              </div>
 
-              {/* QR Sertifikat */}
-              {/* QR Sertifikat */}
-              <Rnd
-                bounds="parent"
-                enableResizing={false}
-                size={{ width: qrBox.size, height: qrBox.size }}
-                position={{ x: qrBox.x, y: qrBox.y }}
-                onDragStop={(_, d) =>
-                  setQrBox((prev) => ({
-                    ...prev,
-                    x: d.x,
-                    y: d.y,
-                  }))
-                }
-                className="
-    cursor-move
-    flex items-center justify-center
-    bg-white           /* FULL putih */
-    rounded-xl
-    border border-[#C7D2FE]
-    shadow-[0_8px_20px_rgba(15,23,42,0.18)]
-  "
-              >
-                {/* QR Container */}
-                <div className="relative w-[75%] h-[75%] bg-white flex items-center justify-center">
-                  {/* 3 FINDER PATTERN (sudut QR) */}
-                  <div className="absolute top-0 left-0 w-8 h-8 border-[3px] border-black bg-white flex items-center justify-center">
-                    <div className="w-5 h-5 border-[3px] border-black flex items-center justify-center">
-                      <div className="w-3 h-3 bg-black" />
+              {/* QR – pojok kanan bawah */}
+              <div className="absolute bottom-8 right-8 w-20 md:w-24 aspect-square bg-white rounded-xl border border-[#C7D2FE] shadow-[0_8px_20px_rgba(15,23,42,0.18)] flex items-center justify-center">
+                <div className="relative w-[78%] h-[78%] bg-white flex items-center justify-center">
+                  {/* Finder pattern */}
+                  <div className="absolute top-0 left-0 w-6 h-6 border-[2px] border-black bg-white flex items-center justify-center">
+                    <div className="w-4 h-4 border-[2px] border-black flex items-center justify-center">
+                      <div className="w-2.5 h-2.5 bg-black" />
+                    </div>
+                  </div>
+                  <div className="absolute top-0 right-0 w-6 h-6 border-[2px] border-black bg-white flex items-center justify-center">
+                    <div className="w-4 h-4 border-[2px] border-black flex items-center justify-center">
+                      <div className="w-2.5 h-2.5 bg-black" />
+                    </div>
+                  </div>
+                  <div className="absolute bottom-0 left-0 w-6 h-6 border-[2px] border-black bg-white flex items-center justify-center">
+                    <div className="w-4 h-4 border-[2px] border-black flex items-center justify-center">
+                      <div className="w-2.5 h-2.5 bg-black" />
                     </div>
                   </div>
 
-                  <div className="absolute top-0 right-0 w-8 h-8 border-[3px] border-black bg-white flex items-center justify-center">
-                    <div className="w-5 h-5 border-[3px] border-black flex items-center justify-center">
-                      <div className="w-3 h-3 bg-black" />
-                    </div>
-                  </div>
-
-                  <div className="absolute bottom-0 left-0 w-8 h-8 border-[3px] border-black bg-white flex items-center justify-center">
-                    <div className="w-5 h-5 border-[3px] border-black flex items-center justify-center">
-                      <div className="w-3 h-3 bg-black" />
-                    </div>
-                  </div>
-
-                  {/* GRID TENGAH – pola acak tapi mirip QR */}
-                  <div className="absolute inset-0 px-3 py-3">
-                    <div className="w-full h-full grid grid-cols-8 grid-rows-8 gap-[2px]">
+                  {/* Grid tengah (pattern acak) */}
+                  <div className="absolute inset-0 px-2.5 py-2.5">
+                    <div className="w-full h-full grid grid-cols-7 grid-rows-7 gap-[2px]">
                       {[
-                        1, 0, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 1, 0,
-                        0, 1, 0, 1, 1, 0, 1, 1, 1, 0, 1, 0, 0, 1, 0, 0, 1, 1, 1,
-                        0, 1, 1, 1, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 0, 1, 0, 1, 1,
-                        0, 1, 0, 1, 0, 1, 1,
+                        1, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 1, 1, 0, 0, 1,
+                        0, 1, 0, 1, 1, 0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 1, 0, 1, 0,
+                        0, 1, 0, 1, 1, 0, 1, 0, 1,
                       ].map((v, i) => (
                         <div
                           key={i}
@@ -352,17 +276,18 @@ const CertificateSettingsPage = () => {
                     </div>
                   </div>
                 </div>
-              </Rnd>
+              </div>
             </div>
 
             <p className="mt-2 text-[11px] text-[#34427080]">
-              Kanvas ini menyesuaikan rasio A4 landscape. Di backend, posisi
-              disimpan dalam koordinat pixel relatif ke ukuran asli sertifikat.
+              Di sistem, layout ini dikunci sebagai template A4 landscape. Saat
+              generate, teks & QR akan dirender di posisi yang sama seperti
+              preview ini.
             </p>
           </div>
         </section>
 
-        {/* PANEL PENGATURAN */}
+        {/* PANEL PENGATURAN SEDERHANA */}
         <section
           className="
             rounded-3xl bg-white/90 border border-white/70
@@ -371,244 +296,109 @@ const CertificateSettingsPage = () => {
             flex flex-col gap-4
           "
         >
-          {/* Background URL */}
-          <div className="space-y-1">
-            <label className="block text-xs font-semibold text-[#344270]">
-              URL Background Sertifikat
-            </label>
-            <div
+          {/* Download template kosong */}
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-[#344270]">
+              Template Kosong Sertifikat
+            </p>
+            <p className="text-[11px] text-[#34427080]">
+              Download file template A4 landscape, edit di Canva/Figma/Photoshop
+              (tambahkan logo, tanda tangan, dll), lalu export sebagai gambar
+              dan upload lagi di sini.
+            </p>
+
+            <button
+              type="button"
+              onClick={() =>
+                alert(
+                  "Dummy: di sini nanti download file template sertifikat (PNG/PDF)."
+                )
+              }
               className="
-                flex items-center gap-2
+                inline-flex items-center gap-2
                 rounded-2xl border border-[#E4E7F5]
-                bg-white/80 px-3 py-2.5
-                focus-within:ring-2 focus-within:ring-[#50A3FB]/60
-                focus-within:border-transparent
+                bg-white/80 text-[#344270]
+                px-3 py-2 text-xs md:text-sm font-semibold
+                hover:bg-white transition
               "
             >
-              <ImageIcon className="w-4 h-4 text-[#50A3FB]" />
-              <input
-                type="text"
-                value={backgroundUrl}
-                onChange={(e) => setBackgroundUrl(e.target.value)}
-                placeholder="https://contoh.com/certificate-bg.png"
-                className="
-                  w-full bg-transparent outline-none
-                  text-xs md:text-sm text-[#344270]
-                  placeholder:text-[#34427066]
-                "
-              />
+              <DownloadIcon className="w-4 h-4" />
+              <span>Download Template Kosong (A4)</span>
+            </button>
+          </div>
+
+          {/* Upload background (drag & drop) */}
+          <div className="space-y-2 border-t border-[#E4E7F5] pt-3">
+            <label className="block text-xs font-semibold text-[#344270]">
+              Upload Background Sertifikat
+            </label>
+
+            <div
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              className={`
+                flex flex-col items-center justify-center gap-2
+                rounded-2xl border
+                px-4 py-6
+                text-center
+                cursor-pointer
+                transition-all
+                ${
+                  dragActive
+                    ? "border-[#50A3FB] bg-[#E0F2FE]"
+                    : "border-[#E4E7F5] bg-white/80"
+                }
+              `}
+              onClick={() => {
+                const input = document.getElementById(
+                  "bg-upload-input"
+                ) as HTMLInputElement | null;
+                input?.click();
+              }}
+            >
+              <ImageIcon className="w-6 h-6 text-[#50A3FB]" />
+              <div className="text-xs text-[#344270] font-medium">
+                Tarik & jatuhkan gambar ke sini
+              </div>
+              <div className="text-[11px] text-[#34427080]">
+                atau <span className="font-semibold">klik untuk pilih file</span>{" "}
+                (PNG/JPG, rasio A4 landscape).
+              </div>
+              {backgroundFile && (
+                <p className="mt-2 text-[11px] text-[#34427080]">
+                  File terpilih:{" "}
+                  <span className="font-semibold">
+                    {backgroundFile.name}
+                  </span>
+                </p>
+              )}
             </div>
+
+            <input
+              id="bg-upload-input"
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleFileChange}
+            />
+
             <p className="text-[10px] text-[#34427080]">
-              Background dibuat di luar (Canva/Figma). CERMIN cuma nambahin teks
-              dan QR di atasnya.
+              Disarankan: ukuran minimal 2480×1754 px (A4 300 DPI) agar hasil
+              cetak tetap tajam.
             </p>
           </div>
 
-          {/* Nama Peserta controls */}
-          <div className="space-y-2 border-t border-[#E4E7F5] pt-3">
-            <div className="flex items-center gap-2">
-              <Type className="w-4 h-4 text-[#50A3FB]" />
-              <p className="text-xs font-semibold text-[#344270]">
-                Nama Peserta
-              </p>
-            </div>
-
-            {/* Font size bebas */}
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[11px] text-[#34427080]">
-                Ukuran font (px)
-              </span>
-              <input
-                type="number"
-                value={nameBox.fontSize}
-                onChange={(e) =>
-                  setNameBox((prev) => ({
-                    ...prev,
-                    fontSize: safeNumber(e.target.value, prev.fontSize),
-                  }))
-                }
-                className="
-                  w-24 rounded-xl border border-[#E4E7F5]
-                  bg-white/80 px-2 py-1.5
-                  text-xs text-[#344270]
-                  focus:outline-none focus:ring-2 focus:ring-[#50A3FB]/60 focus:border-transparent
-                  text-right
-                "
-              />
-            </div>
-
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() =>
-                  setNameBox((prev) => ({
-                    ...prev,
-                    fontWeight: prev.fontWeight === "700" ? "400" : "700",
-                  }))
-                }
-                className={`
-                  flex-1 inline-flex items-center justify-center gap-1
-                  rounded-2xl border px-2 py-2 text-xs font-semibold
-                  ${
-                    nameBox.fontWeight === "700"
-                      ? "border-[#50A3FB] bg-[#EFF6FF] text-[#1D4ED8]"
-                      : "border-[#E4E7F5] bg-white text-[#34427099]"
-                  }
-                `}
-              >
-                <Bold className="w-3 h-3" />
-                <span>Bold</span>
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  setNameBox((prev) => ({
-                    ...prev,
-                    italic: !prev.italic,
-                  }))
-                }
-                className={`
-                  flex-1 inline-flex items-center justify-center gap-1
-                  rounded-2xl border px-2 py-2 text-xs font-semibold
-                  ${
-                    nameBox.italic
-                      ? "border-[#50A3FB] bg-[#EFF6FF] text-[#1D4ED8]"
-                      : "border-[#E4E7F5] bg-white text-[#34427099]"
-                  }
-                `}
-              >
-                <Italic className="w-3 h-3" />
-                <span>Italic</span>
-              </button>
-            </div>
-
-            <p className="text-[10px] text-[#34427080]">
-              Posisi diatur dengan drag teks &quot;Nama Peserta&quot; di
-              preview.
+          {/* Info layout (read-only) */}
+          <div className="space-y-1 border-t border-[#E4E7F5] pt-3">
+            <p className="text-xs font-semibold text-[#344270]">
+              Layout Dinamis (Terkunci)
             </p>
-          </div>
-
-          {/* Nomor Sertifikat controls */}
-          <div className="space-y-2 border-t border-[#E4E7F5] pt-3">
-            <div className="flex items-center gap-2">
-              <Hash className="w-4 h-4 text-[#50A3FB]" />
-              <p className="text-xs font-semibold text-[#344270]">
-                Nomor Sertifikat
-              </p>
-            </div>
-
-            {/* Font size bebas */}
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[11px] text-[#34427080]">
-                Ukuran font (px)
-              </span>
-              <input
-                type="number"
-                value={numberBox.fontSize}
-                onChange={(e) =>
-                  setNumberBox((prev) => ({
-                    ...prev,
-                    fontSize: safeNumber(e.target.value, prev.fontSize),
-                  }))
-                }
-                className="
-                  w-24 rounded-xl border border-[#E4E7F5]
-                  bg-white/80 px-2 py-1.5
-                  text-xs text-[#344270]
-                  focus:outline-none focus:ring-2 focus:ring-[#50A3FB]/60 focus:border-transparent
-                  text-right
-                "
-              />
-            </div>
-
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() =>
-                  setNumberBox((prev) => ({
-                    ...prev,
-                    fontWeight: prev.fontWeight === "700" ? "400" : "700",
-                  }))
-                }
-                className={`
-                  flex-1 inline-flex items-center justify-center gap-1
-                  rounded-2xl border px-2 py-2 text-xs font-semibold
-                  ${
-                    numberBox.fontWeight === "700"
-                      ? "border-[#50A3FB] bg-[#EFF6FF] text-[#1D4ED8]"
-                      : "border-[#E4E7F5] bg-white text-[#34427099]"
-                  }
-                `}
-              >
-                <Bold className="w-3 h-3" />
-                <span>Bold</span>
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  setNumberBox((prev) => ({
-                    ...prev,
-                    italic: !prev.italic,
-                  }))
-                }
-                className={`
-                  flex-1 inline-flex items-center justify-center gap-1
-                  rounded-2xl border px-2 py-2 text-xs font-semibold
-                  ${
-                    numberBox.italic
-                      ? "border-[#50A3FB] bg-[#EFF6FF] text-[#1D4ED8]"
-                      : "border-[#E4E7F5] bg-white text-[#34427099]"
-                  }
-                `}
-              >
-                <Italic className="w-3 h-3" />
-                <span>Italic</span>
-              </button>
-            </div>
-
-            <p className="text-[10px] text-[#34427080]">
-              Posisi diatur dengan drag teks &quot;No. Sertifikat&quot; di
-              preview.
-            </p>
-          </div>
-
-          {/* QR controls */}
-          <div className="space-y-2 border-t border-[#E4E7F5] pt-3">
-            <div className="flex items-center gap-2">
-              <QrCode className="w-4 h-4 text-[#50A3FB]" />
-              <p className="text-xs font-semibold text-[#344270]">
-                QR Sertifikat
-              </p>
-            </div>
-
-            {/* Ukuran QR bebas */}
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[11px] text-[#34427080]">
-                Ukuran sisi (px)
-              </span>
-              <input
-                type="number"
-                value={qrBox.size}
-                onChange={(e) =>
-                  setQrBox((prev) => ({
-                    ...prev,
-                    size: safeNumber(e.target.value, prev.size),
-                  }))
-                }
-                className="
-                  w-24 rounded-xl border border-[#E4E7F5]
-                  bg-white/80 px-2 py-1.5
-                  text-xs text-[#344270]
-                  focus:outline-none focus:ring-2 focus:ring-[#50A3FB]/60 focus:border-transparent
-                  text-right
-                "
-              />
-            </div>
-
-            <p className="text-[10px] text-[#34427080]">
-              Posisi QR diatur dengan drag box QR di preview. Di versi real,
-              kotak tersebut akan berisi QR valid untuk verifikasi sertifikat.
-            </p>
+            <ul className="text-[11px] text-[#34427080] list-disc list-inside space-y-1">
+              <li>Nama peserta: huruf besar di tengah sertifikat (bold).</li>
+              <li>Nomor sertifikat: tepat di bawah nama (regular).</li>
+              <li>QR verifikasi: pojok kanan bawah, di atas background.</li>
+            </ul>
           </div>
 
           {/* Actions */}

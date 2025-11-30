@@ -249,7 +249,7 @@ const EditEventPage = () => {
               <label className="block text-sm font-semibold text-[#344270]">
                 Kuota Peserta
               </label>
-              <div className="flex items-center gap-2 rounded-2xl border border-[#E4E7F5] bg-white/80 px-4 py-2.5 focus-within:ring-2 focus-within:ring-[#50A3FB]/60 focus-within:border-transparent">
+              <div className="flex items-center  gap-2 rounded-2xl border border-[#E4E7F5] bg-white/80 px-4 py-2.5 focus-within:ring-2 focus-within:ring-[#50A3FB]/60 focus-within:border-transparent">
                 <Users className="w-4 h-4 text-[#50A3FB]" />
                 <input
                   type="number"

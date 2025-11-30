@@ -22,6 +22,9 @@ interface ParticipantRow {
   ticketType: string;
 }
 
+// Status event
+type EventStatus = "Draf" | "Aktif" | "Selesai" | "Diblokir";
+
 const EventDetailPage = () => {
   const params = useParams();
   const id = params?.id as string | undefined;
@@ -36,9 +39,11 @@ const EventDetailPage = () => {
     price: 55000,
     quota: 100,
     registered: 25,
-    status: "Aktif",
+    status: "Diblokir" as EventStatus,
     duration: "8 Jam",
   };
+
+  const [eventStatus, setEventStatus] = useState<EventStatus>(event.status);
 
   const participants: ParticipantRow[] = [
     {
@@ -69,6 +74,36 @@ const EventDetailPage = () => {
   const [feedbackInfo, setFeedbackInfo] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
 
+  const getStatusClasses = (status: EventStatus) => {
+    switch (status) {
+      case "Draf":
+        return "bg-slate-100 text-slate-700";
+      case "Aktif":
+        return "bg-[#E0F4FF] text-[#2563EB]";
+      case "Selesai":
+        return "bg-emerald-50 text-emerald-700";
+      case "Diblokir":
+        return "bg-red-50 text-red-600";
+      default:
+        return "bg-slate-100 text-slate-700";
+    }
+  };
+
+  const getDotColor = (status: EventStatus) => {
+    switch (status) {
+      case "Draf":
+        return "bg-slate-400";
+      case "Aktif":
+        return "bg-emerald-500";
+      case "Selesai":
+        return "bg-emerald-600";
+      case "Diblokir":
+        return "bg-red-500";
+      default:
+        return "bg-slate-400";
+    }
+  };
+
   return (
     <>
       {/* Header atas */}
@@ -87,26 +122,66 @@ const EventDetailPage = () => {
         </div>
 
         <div className="flex items-center gap-2 md:gap-3">
-          <span
-            className="
-      inline-flex items-center px-3 py-1.5 
-      rounded-full text-xs font-semibold
-      bg-[#E0F4FF] text-[#2563EB]
-    "
-          >
-            <span className="w-2 h-2 rounded-full bg-emerald-500 mr-2" />
-            {event.status}
-          </span>
+          {/* STATUS BADGE */}
+          {eventStatus === "Diblokir" ? (
+            // Kalau diblokir: badge statis, nggak bisa diubah
+            <div
+              className={`
+                inline-flex items-center px-3 py-1.5 
+                rounded-full text-xs font-semibold
+                border border-[#FCA5A5]
+                ${getStatusClasses(eventStatus)}
+              `}
+            >
+              <span
+                className={`w-2 h-2 rounded-full mr-2 ${getDotColor(
+                  eventStatus
+                )}`}
+              />
+              <span>Diblokir</span>
+            </div>
+          ) : (
+            // Selain diblokir: dropdown status
+            <div
+              className={`
+                inline-flex items-center px-3 py-1.5 
+                rounded-full text-xs font-semibold
+                border border-[#E4E7F5]
+                ${getStatusClasses(eventStatus)}
+              `}
+            >
+              <span
+                className={`w-2 h-2 rounded-full mr-2 ${getDotColor(
+                  eventStatus
+                )}`}
+              />
+              <select
+                value={eventStatus}
+                onChange={(e) => setEventStatus(e.target.value as EventStatus)}
+                className="
+                  bg-transparent border-none outline-none
+                  text-xs font-semibold
+                  pr-4
+                  cursor-pointer
+                  appearance-none
+                "
+              >
+                <option value="Draf">Draf</option>
+                <option value="Aktif">Aktif</option>
+                <option value="Selesai">Selesai</option>
+              </select>
+            </div>
+          )}
 
           <Link
             href={`/dashboard/event/${id ?? ""}/edit`}
             className="
-      hidden md:inline-flex items-center gap-2
-      rounded-full border border-[#E4E7F5]
-      bg-white/80 text-[#344270]
-      px-4 py-2 text-xs md:text-sm font-semibold
-      hover:bg-white transition
-    "
+              hidden md:inline-flex items-center gap-2
+              rounded-full border border-[#E4E7F5]
+              bg-white/80 text-[#344270]
+              px-4 py-2 text-xs md:text-sm font-semibold
+              hover:bg-white transition
+            "
           >
             Edit Event
           </Link>
@@ -117,13 +192,13 @@ const EventDetailPage = () => {
               type="button"
               onClick={() => setMenuOpen((prev) => !prev)}
               className="
-        inline-flex items-center justify-center
-        w-9 h-9 rounded-full
-        border border-[#E4E7F5]
-        bg-white/80 text-[#34427080]
-        hover:bg-white hover:text-[#344270]
-        transition
-      "
+                inline-flex items-center justify-center
+                w-9 h-9 rounded-full
+                border border-[#E4E7F5]
+                bg-white/80 text-[#34427080]
+                hover:bg-white hover:text-[#344270]
+                transition
+              "
             >
               <MoreHorizontal className="w-4 h-4" />
             </button>
@@ -131,21 +206,21 @@ const EventDetailPage = () => {
             {menuOpen && (
               <div
                 className="
-          absolute right-0 mt-2 w-56
-          rounded-2xl bg-white
-          border border-[#E4E7F5]
-          shadow-[0_18px_45px_rgba(15,23,42,0.16)]
-          py-2 z-20
-        "
+                  absolute right-0 mt-2 w-56
+                  rounded-2xl bg-white
+                  border border-[#E4E7F5]
+                  shadow-[0_18px_45px_rgba(15,23,42,0.16)]
+                  py-2 z-20
+                "
               >
                 <Link
                   href={`/dashboard/event/${id ?? ""}/checkin`}
                   onClick={() => setMenuOpen(false)}
                   className="
-            flex items-center gap-2
-            w-full px-4 py-2.5 text-xs md:text-sm
-            text-[#344270cc] hover:bg-[#F5F6FF]
-          "
+                    flex items-center gap-2
+                    w-full px-4 py-2.5 text-xs md:text-sm
+                    text-[#344270cc] hover:bg-[#F5F6FF]
+                  "
                 >
                   <TicketPercent className="w-4 h-4 text-[#50A3FB]" />
                   <span>Scan Tiket / Check-in</span>
@@ -155,10 +230,10 @@ const EventDetailPage = () => {
                   href={`/dashboard/event/${id ?? ""}/certificates`}
                   onClick={() => setMenuOpen(false)}
                   className="
-            flex items-center gap-2
-            w-full px-4 py-2.5 text-xs md:text-sm
-            text-[#344270cc] hover:bg-[#F5F6FF]
-          "
+                    flex items-center gap-2
+                    w-full px-4 py-2.5 text-xs md:text-sm
+                    text-[#344270cc] hover:bg-[#F5F6FF]
+                  "
                 >
                   <CheckCircle2 className="w-4 h-4 text-[#50A3FB]" />
                   <span>Pengaturan Sertifikat</span>
@@ -168,10 +243,10 @@ const EventDetailPage = () => {
                   href={`/seminar/${id ?? ""}`}
                   onClick={() => setMenuOpen(false)}
                   className="
-            flex items-center gap-2
-            w-full px-4 py-2.5 text-xs md:text-sm
-            text-[#344270cc] hover:bg-[#F5F6FF]
-          "
+                    flex items-center gap-2
+                    w-full px-4 py-2.5 text-xs md:text-sm
+                    text-[#344270cc] hover:bg-[#F5F6FF]
+                  "
                 >
                   <Calendar className="w-4 h-4 text-[#50A3FB]" />
                   <span>Lihat Halaman Publik Event</span>

@@ -4,6 +4,7 @@ export type LoginData = {
 };
 
 export type Users = {
+  role: string;
   id?: string;
   name: string;
   email: string;
@@ -11,6 +12,6 @@ export type Users = {
   roleId: string;
 };
 
-export type Role = {
-  role: string;
+export type RoleData = {
+  role: "superadmin" | "admin" | "staff" | null;
 };
