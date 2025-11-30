@@ -1,5 +1,3 @@
-// src/lib/token.ts
-
 const ACCESS_TOKEN_KEY = "accessToken";
 const ACCESS_TOKEN_EXP_KEY = "accessTokenExp";
 

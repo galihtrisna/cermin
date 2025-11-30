@@ -1,17 +1,15 @@
-export type LoginData = {
-  email: string;
-  password: string;
-};
+export type Role = "superadmin" | "admin" | "staff" | null;
 
-export type Users = {
-  role: string;
-  id?: string;
+export interface Users {
+  id: string;
   name: string;
   email: string;
-  password?: string;
-  roleId: string;
-};
+  role: Role;
+  is_verified: boolean;
+  created_at: string;
+}
 
-export type RoleData = {
-  role: "superadmin" | "admin" | "staff" | null;
-};
+export interface LoginData {
+  email: string;
+  password: string;
+}

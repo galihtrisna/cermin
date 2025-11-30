@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { checkUser, setMyRole } from "@/app/actions/auth";
 import { applyOrganizer } from "@/app/actions/organizer";
 import type { Users } from "@/lib/definitions";
-import { clearAccessToken } from "@/lib/token";
 
 type Step = "choose-role" | "organizer-form" | "submitted";
 
@@ -39,35 +38,24 @@ export default function RoleSetupPage() {
   });
   const [errors, setErrors] = useState<OrganizerFormErrors>({});
 
-  // Bagian useEffect di app/role-setup/page.tsx
-
   useEffect(() => {
     const init = async () => {
       try {
-        const u = await checkUser(); // GET /api/users/admin
+        const u = await checkUser();
 
-        // PERBAIKAN: Jika u null (misal karena 401 tertangkap tapi return null),
-        // kita paksa logout
-        if (!u) {
-          throw new Error("User data is empty");
+        if (!u.role) {
+          setUser(u);
+          setLoadingUser(false);
+          return;
         }
-
-        setUser(u);
 
         if (u.role === "staff") {
           router.replace("/dashboard");
           return;
         }
-        if (u.role === "admin") {
-          router.replace("/dashboard");
-          return;
-        }
+
+        router.replace("/dashboard"); // admin/superadmin
       } catch (err) {
-        console.error("Gagal memuat sesi:", err);
-
-        // PENTING: Hapus token supaya tidak looping saat dilempar ke login
-        clearAccessToken();
-
         router.replace("/auth?login");
       } finally {
         setLoadingUser(false);
@@ -99,13 +87,12 @@ export default function RoleSetupPage() {
     return Object.keys(newErrors).length === 0;
   };
 
-  // 2️⃣ Handler pilih role staff
   const handleChooseStaff = async () => {
     try {
       setSubmitting(true);
       const updated = await setMyRole("staff");
       setUser(updated);
-      router.replace("/dashboard-staff"); // sesuaikan rute staff-mu
+      router.replace("/dashboard");
     } catch (err: any) {
       console.error(err);
       setErrors({
@@ -118,23 +105,19 @@ export default function RoleSetupPage() {
     }
   };
 
-  // 3️⃣ Handler pilih penyelenggara (admin) → lanjut ke form
   const handleChooseOrganizer = () => {
     setStep("organizer-form");
   };
 
-  // 4️⃣ Submit form penyelenggara
   const handleOrganizerSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!validateOrganizerForm()) return;
 
     try {
       setSubmitting(true);
-      // 1) Set role jadi admin dulu
       const updated = await setMyRole("admin");
       setUser(updated);
 
-      // 2) Kirim pengajuan penyelenggara
       await applyOrganizer({
         organizer_name: organizerForm.organizer_name.trim(),
         description: organizerForm.description.trim(),
@@ -188,7 +171,6 @@ export default function RoleSetupPage() {
 
         {step === "choose-role" && (
           <section className="grid md:grid-cols-2 gap-4">
-            {/* Kartu Staff */}
             <button
               type="button"
               onClick={handleChooseStaff}
@@ -200,14 +182,13 @@ export default function RoleSetupPage() {
               </h2>
               <p className="text-sm text-slate-600">
                 Akses fitur sebagai staff atau peserta: lihat event, cek
-                sertifikat, dan fitur-fitur non-penyelenggara lainnya.
+                sertifikat, dan fitur non-penyelenggara lainnya.
               </p>
               <span className="mt-2 inline-flex text-xs font-medium text-slate-700 bg-white px-2 py-1 rounded-full border border-slate-200">
                 Role: staff
               </span>
             </button>
 
-            {/* Kartu Penyelenggara */}
             <button
               type="button"
               onClick={handleChooseOrganizer}

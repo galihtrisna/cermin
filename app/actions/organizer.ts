@@ -1,4 +1,3 @@
-// src/app/actions/organizer.ts
 import { createAxiosJWT } from "@/lib/axiosJwt";
 
 export interface OrganizerApplicationPayload {

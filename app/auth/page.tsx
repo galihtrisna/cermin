@@ -6,7 +6,12 @@ import { Eye, EyeOff } from "lucide-react";
 import Image from "next/image";
 import { useSearchParams, useRouter } from "next/navigation";
 import { signIn, registerUser, checkUser } from "@/app/actions/auth";
-import { getAccessToken, getAccessTokenExp } from "@/lib/token";
+import {
+  getAccessToken,
+  getAccessTokenExp,
+  clearAccessToken,
+} from "@/lib/token";
+import type { Users } from "@/lib/definitions";
 
 type Mode = "login" | "register";
 
@@ -49,27 +54,34 @@ const AuthPage = () => {
 
   const isLogin = mode === "login";
 
-  // 🔁 Cek apakah user sudah login → kalau iya, redirect
   useEffect(() => {
     const checkSession = async () => {
-      // 1) Cek token lokal dulu (cepat, tanpa API)
       const token = getAccessToken();
       const exp = getAccessTokenExp();
       const now = Date.now();
 
-      if (token && exp && now < exp) {
-        // token masih berlaku → langsung lempar ke dashboard
-        router.replace("/role-setup");
+      if (!token || !exp || now >= exp) {
+        setCheckingSession(false);
         return;
       }
 
-      // 2) Kalau token lokal ga ada / expired, optional cek ke backend
       try {
-        await checkUser(); // kalau sukses artinya token valid (via axiosJWT)
-        router.replace("/role-setup");
+        const user: Users = await checkUser();
+
+        if (!user.role) {
+          router.replace("/role-setup");
+          return;
+        }
+
+        if (user.role === "staff") {
+          router.replace("/dashboard");
+          return;
+        }
+
+        // admin / superadmin
+        router.replace("/dashboard");
       } catch (err) {
-        // gagal = belum login / token invalid → biarin di halaman ini
-      } finally {
+        clearAccessToken();
         setCheckingSession(false);
       }
     };
@@ -90,10 +102,8 @@ const AuthPage = () => {
   const validate = (): boolean => {
     const newErrors: FormErrors = {};
 
-    if (!isLogin) {
-      if (!form.name.trim()) {
-        newErrors.name = "Nama wajib diisi.";
-      }
+    if (!isLogin && !form.name.trim()) {
+      newErrors.name = "Nama wajib diisi.";
     }
 
     if (!form.email.trim()) {
@@ -129,15 +139,13 @@ const AuthPage = () => {
 
     try {
       if (isLogin) {
-        // LOGIN
         await signIn({
           email: form.email.trim(),
           password: form.password,
         });
 
-        router.push("/dashboard"); // ganti ke halaman tujuanmu
+        router.push("/dashboard");
       } else {
-        // REGISTER
         await registerUser({
           name: form.name.trim(),
           email: form.email.trim(),
@@ -165,7 +173,6 @@ const AuthPage = () => {
     }
   };
 
-  // ⏳ Saat lagi cek sesi, tampilin loading ringan biar ga flicker
   if (checkingSession) {
     return (
       <main className="min-h-screen flex items-center justify-center px-4">
@@ -177,7 +184,6 @@ const AuthPage = () => {
   return (
     <main className="min-h-screen flex items-center justify-center px-4">
       <div className="w-full max-w-2xl space-y-8">
-        {/* Logo + tagline */}
         <div className="text-center">
           <div className="inline-flex items-center gap-2 mb-2">
             <Image src="/cermin-logo.png" alt="logo" width={200} height={100} />
@@ -187,7 +193,6 @@ const AuthPage = () => {
           </p>
         </div>
 
-        {/* Tab Login / Register */}
         <div className="flex justify-center">
           <div className="inline-flex bg-white/40 backdrop-blur-xl rounded-full p-1 shadow-[0_10px_40px_rgba(15,23,42,0.15)]">
             <button
@@ -215,7 +220,6 @@ const AuthPage = () => {
           </div>
         </div>
 
-        {/* Card */}
         <section
           className="
             bg-white/90 backdrop-blur-2xl 
@@ -226,7 +230,6 @@ const AuthPage = () => {
           "
         >
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Header */}
             <div className="space-y-1 mb-4">
               <h1 className="text-2xl md:text-3xl font-semibold text-[#344270]">
                 {isLogin ? "Login" : "Daftar"}
@@ -238,14 +241,12 @@ const AuthPage = () => {
               </p>
             </div>
 
-            {/* General error / info */}
             {errors.general && (
               <div className="rounded-xl border border-red-200 bg-red-50/80 px-4 py-3 text-sm text-red-700">
                 {errors.general}
               </div>
             )}
 
-            {/* Nama (Register only) */}
             {!isLogin && (
               <div className="space-y-1">
                 <label
@@ -274,7 +275,6 @@ const AuthPage = () => {
               </div>
             )}
 
-            {/* Email */}
             <div className="space-y-1">
               <label
                 htmlFor="email"
@@ -301,7 +301,6 @@ const AuthPage = () => {
               )}
             </div>
 
-            {/* Password */}
             <div className="space-y-1">
               <label
                 htmlFor="password"
@@ -347,7 +346,6 @@ const AuthPage = () => {
               )}
             </div>
 
-            {/* Konfirmasi Password (Register only) */}
             {!isLogin && (
               <div className="space-y-1">
                 <label
@@ -382,7 +380,6 @@ const AuthPage = () => {
               </div>
             )}
 
-            {/* Submit button */}
             <button
               type="submit"
               disabled={submitting}
