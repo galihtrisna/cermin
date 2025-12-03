@@ -5,22 +5,48 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
-  Video,
   Award,
   Settings,
   LogOut,
   Calendar,
+  Users as UsersIcon,
 } from "lucide-react";
 
-const navItems = [
-  { label: "Overview", href: "/dashboard", icon: LayoutDashboard },
-  { label: "Event Saya", href: "/dashboard/event", icon: Calendar },
-  { label: "Sertifikat", href: "/dashboard/certificates", icon: Award },
-  { label: "Pengaturan", href: "/dashboard/settings", icon: Settings },
-];
+interface SidebarProps {
+  role: string;       // <---- SIMPLE: biarin string aja
+  onLogout: () => void;
+}
 
-const DashboardSidebar = () => {
+// MAP role → navItems
+const navMap: Record<string, any[]> = {
+  staff: [
+    { label: "Overview", href: "/dashboard", icon: LayoutDashboard },
+    { label: "Event Diikuti", href: "/dashboard/event", icon: Calendar },
+    { label: "Sertifikat", href: "/dashboard/certificates", icon: Award },
+  ],
+
+  admin: [
+    { label: "Overview", href: "/dashboard", icon: LayoutDashboard },
+    { label: "Event Saya", href: "/dashboard/event", icon: Calendar },
+    { label: "Sertifikat", href: "/dashboard/certificates", icon: Award },
+    { label: "Pengaturan", href: "/dashboard/settings", icon: Settings },
+  ],
+
+  superadmin: [
+    { label: "Overview", href: "/dashboard", icon: LayoutDashboard },
+    { label: "Event Saya", href: "/dashboard/event", icon: Calendar },
+    { label: "Sertifikat", href: "/dashboard/certificates", icon: Award },
+    { label: "Kelola Pengguna", href: "/superadmin/users", icon: UsersIcon },
+    { label: "Pengaturan Sistem", href: "/superadmin/settings", icon: Settings },
+  ],
+};
+
+// fallback kalau role unknown → staff
+const getNavItems = (role: string) => navMap[role] ?? navMap["staff"];
+
+export default function DashboardSidebar({ role, onLogout }: SidebarProps) {
   const pathname = usePathname();
+  const navItems = getNavItems(role);
 
   return (
     <aside
@@ -86,6 +112,7 @@ const DashboardSidebar = () => {
 
       <button
         type="button"
+        onClick={onLogout}
         className="
           mt-4 flex items-center gap-2
           px-3 py-2 rounded-2xl
@@ -102,6 +129,4 @@ const DashboardSidebar = () => {
       </button>
     </aside>
   );
-};
-
-export default DashboardSidebar;
+}
