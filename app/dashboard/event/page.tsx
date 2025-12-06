@@ -1,56 +1,46 @@
-// app/dashboard/event/page.tsx
 "use client";
 
-import { useState } from "react";
-import { Search, Filter } from "lucide-react";
-import EventTable, {
-  type EventRow,
-} from "@/components/dashboard/EventTable";
+import { useEffect, useState } from "react";
+import { Search } from "lucide-react";
+import EventTable, { type EventRow } from "@/components/dashboard/EventTable";
+import { getMyEvents } from "@/app/actions/event";
 
 const EventListPage = () => {
+  const [events, setEvents] = useState<EventRow[]>([]);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "ended">(
     "all"
   );
+  const [loading, setLoading] = useState(true);
 
-  // dummy data
-  const allEvents: EventRow[] = [
-    {
-      id: "1",
-      title: "Digital Marketing 2025",
-      date: "10 Oktober 2025",
-      price: 55000,
-      participants: "25/100",
-      status: "Aktif",
-    },
-    {
-      id: "2",
-      title: "UI/UX Fundamentals Bootcamp",
-      date: "20 November 2025",
-      price: 75000,
-      participants: "78/150",
-      status: "Aktif",
-    },
-    {
-      id: "3",
-      title: "Webinar: Manajemen Waktu Mahasiswa",
-      date: "02 September 2025",
-      price: 0,
-      participants: "120/500",
-      status: "Selesai",
-    },
-  ];
+  // Fetch event user login
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const data = await getMyEvents();
+        setEvents(data);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const filtered = allEvents.filter((ev) => {
+    load();
+  }, []);
+
+  // Filter frontend
+  const filtered = events.filter((ev) => {
     const matchQuery =
-      !query.trim() ||
-      ev.title.toLowerCase().includes(query.toLowerCase());
+      !query.trim() || ev.title.toLowerCase().includes(query.toLowerCase());
+
     const matchStatus =
       statusFilter === "all"
         ? true
         : statusFilter === "active"
-        ? ev.status === "Aktif"
-        : ev.status !== "Aktif";
+        ? ev.status.toLowerCase() === "aktif"
+        : ev.status.toLowerCase() !== "aktif";
+
     return matchQuery && matchStatus;
   });
 
@@ -61,7 +51,7 @@ const EventListPage = () => {
           Event Saya
         </h1>
         <p className="text-sm text-[#34427099]">
-          Kelola semua event yang sudah kamu buat.
+          Kelola semua event yang kamu buat.
         </p>
       </div>
 
@@ -104,35 +94,38 @@ const EventListPage = () => {
           <span className="hidden md:inline text-xs text-[#34427099]">
             Filter status:
           </span>
+
           <div className="inline-flex bg-white/70 rounded-full p-1 border border-[#E4E7F5]">
             <button
               type="button"
               onClick={() => setStatusFilter("all")}
               className={`px-3 py-1.5 rounded-full text-xs font-medium ${
                 statusFilter === "all"
-                  ? "pastel-gradient text-[#344270] shadow-[0_6px_16px_rgba(15,23,42,0.18)]"
+                  ? "pastel-gradient text-[#344270] shadow"
                   : "text-[#34427099]"
               }`}
             >
               Semua
             </button>
+
             <button
               type="button"
               onClick={() => setStatusFilter("active")}
               className={`px-3 py-1.5 rounded-full text-xs font-medium ${
                 statusFilter === "active"
-                  ? "pastel-gradient text-[#344270] shadow-[0_6px_16px_rgba(15,23,42,0.18)]"
+                  ? "pastel-gradient text-[#344270] shadow"
                   : "text-[#34427099]"
               }`}
             >
               Aktif
             </button>
+
             <button
               type="button"
               onClick={() => setStatusFilter("ended")}
               className={`px-3 py-1.5 rounded-full text-xs font-medium ${
                 statusFilter === "ended"
-                  ? "pastel-gradient text-[#344270] shadow-[0_6px_16px_rgba(15,23,42,0.18)]"
+                  ? "pastel-gradient text-[#344270] shadow"
                   : "text-[#34427099]"
               }`}
             >
@@ -142,8 +135,12 @@ const EventListPage = () => {
         </div>
       </section>
 
-      {/* Tabel Event */}
-      <EventTable events={filtered} />
+      {/* Event Table */}
+      {loading ? (
+        <p className="text-sm text-slate-500">Memuat event...</p>
+      ) : (
+        <EventTable events={filtered} />
+      )}
     </>
   );
 };
