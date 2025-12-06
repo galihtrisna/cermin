@@ -1,10 +1,20 @@
-// app/dashboard/event/new/page.tsx
 "use client";
 
-import { useState, FormEvent } from "react";
-import { Calendar, MapPin, Tag, Users, ImageIcon } from "lucide-react";
+import { useState, FormEvent, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { Calendar, MapPin, Tag, Users, ImageIcon, Loader2 } from "lucide-react";
+import { createEvent } from "@/app/actions/event"; // Pastikan import action ini ada
+import { checkUser } from "@/app/actions/auth"; // Untuk cek role
+import type { Users as UserType } from "@/lib/definitions";
 
 const NewEventPage = () => {
+  const router = useRouter();
+
+  // State untuk otorisasi & loading
+  const [isLoadingAuth, setIsLoadingAuth] = useState(true);
+  const [isAuthorized, setIsAuthorized] = useState(false);
+
+  // Form State
   const [submitting, setSubmitting] = useState(false);
   const [title, setTitle] = useState("");
   const [dateTime, setDateTime] = useState("");
@@ -15,23 +25,96 @@ const NewEventPage = () => {
   const [description, setDescription] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = (e: FormEvent) => {
+  // 1. Proteksi Halaman (Client-side protection)
+  useEffect(() => {
+    const verifyAccess = async () => {
+      try {
+        const user: UserType = await checkUser();
+
+        // Cek apakah role admin atau superadmin
+        if (user.role === "admin" || user.role === "superadmin") {
+          setIsAuthorized(true);
+        } else {
+          // Jika bukan admin, lempar ke dashboard utama
+          router.replace("/dashboard");
+        }
+      } catch (err) {
+        // Jika token mati/error, lempar ke login
+        router.replace("/auth?login");
+      } finally {
+        setIsLoadingAuth(false);
+      }
+    };
+
+    verifyAccess();
+  }, [router]);
+
+  // 2. Handle Submit ke Backend
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
 
+    // Validasi sederhana
     if (!title.trim()) {
       setError("Judul event wajib diisi.");
+      return;
+    }
+    if (!dateTime) {
+      setError("Tanggal & waktu wajib diisi.");
+      return;
+    }
+    if (!location.trim()) {
+      setError("Lokasi wajib diisi.");
       return;
     }
 
     setSubmitting(true);
 
-    // TODO: ganti dengan submit ke API
-    setTimeout(() => {
+    try {
+      // Panggil action createEvent
+      // Note: Pastikan format tanggal sesuai format timestampDB (ISO String biasanya aman)
+      const payload = {
+        title,
+        description,
+        datetime: new Date(dateTime).toISOString(), // Konversi ke ISO String
+        location,
+        organizer: "Self", // Nanti backend akan overwrite ini dengan user login (owner_id)
+        image: bannerUrl, // Dikirim, tapi pastikan backend controller menerimanya jika ingin disimpan
+
+        // Tambahan field yang dibutuhkan backend controller (sesuai file controller yang kamu upload)
+        // Backend mengharapkan 'capacity' bukan 'quota'
+        capacity: parseInt(quota) || 0,
+        price: parseInt(price) || 0,
+        status: "Aktif", // Default status saat buat baru
+      };
+
+      await createEvent(payload);
+
+      // Redirect ke list event jika sukses
+      router.push("/dashboard/event");
+    } catch (err: any) {
+      console.error(err);
+      // Menangkap pesan error dari backend
+      const msg =
+        err?.response?.data?.message || err.message || "Gagal membuat event.";
+      setError(msg);
+    } finally {
       setSubmitting(false);
-      setError("Contoh error dari server (nanti ganti dengan real API).");
-    }, 800);
+    }
   };
+
+  // Tampilan Loading saat cek role
+  if (isLoadingAuth) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center text-[#344270]">
+        <Loader2 className="w-8 h-8 animate-spin mb-2 text-[#50A3FB]" />
+        <p className="text-sm font-medium">Memverifikasi akses admin...</p>
+      </div>
+    );
+  }
+
+  // Jika tidak punya akses (sebelum redirect selesai), jangan render apa-apa
+  if (!isAuthorized) return null;
 
   return (
     <>
@@ -64,7 +147,7 @@ const NewEventPage = () => {
           {/* Judul */}
           <div className="space-y-1">
             <label className="block text-sm font-semibold text-[#344270]">
-              Judul Event
+              Judul Event <span className="text-red-500">*</span>
             </label>
             <div className="flex items-center gap-2 rounded-2xl border border-[#E4E7F5] bg-white/80 px-4 py-2.5 focus-within:ring-2 focus-within:ring-[#50A3FB]/60 focus-within:border-transparent">
               <Tag className="w-4 h-4 text-[#50A3FB]" />
@@ -74,6 +157,7 @@ const NewEventPage = () => {
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Contoh: Workshop Digital Marketing 2025"
                 className="w-full bg-transparent outline-none text-sm text-[#344270] placeholder:text-[#34427066]"
+                required
               />
             </div>
           </div>
@@ -82,7 +166,7 @@ const NewEventPage = () => {
           <div className="grid md:grid-cols-2 gap-4">
             <div className="space-y-1">
               <label className="block text-sm font-semibold text-[#344270]">
-                Tanggal & Waktu
+                Tanggal & Waktu <span className="text-red-500">*</span>
               </label>
               <div className="flex items-center gap-2 rounded-2xl border border-[#E4E7F5] bg-white/80 px-4 py-2.5 focus-within:ring-2 focus-within:ring-[#50A3FB]/60 focus-within:border-transparent">
                 <Calendar className="w-4 h-4 text-[#50A3FB]" />
@@ -91,13 +175,14 @@ const NewEventPage = () => {
                   value={dateTime}
                   onChange={(e) => setDateTime(e.target.value)}
                   className="w-full bg-transparent outline-none text-sm text-[#344270]"
+                  required
                 />
               </div>
             </div>
 
             <div className="space-y-1">
               <label className="block text-sm font-semibold text-[#344270]">
-                Lokasi
+                Lokasi <span className="text-red-500">*</span>
               </label>
               <div className="flex items-center gap-2 rounded-2xl border border-[#E4E7F5] bg-white/80 px-4 py-2.5 focus-within:ring-2 focus-within:ring-[#50A3FB]/60 focus-within:border-transparent">
                 <MapPin className="w-4 h-4 text-[#50A3FB]" />
@@ -105,8 +190,9 @@ const NewEventPage = () => {
                   type="text"
                   value={location}
                   onChange={(e) => setLocation(e.target.value)}
-                  placeholder="Offline / Online (Zoom, Google Meet, dll)"
+                  placeholder="Offline / Online (Zoom, GMeet)"
                   className="w-full bg-transparent outline-none text-sm text-[#344270] placeholder:text-[#34427066]"
+                  required
                 />
               </div>
             </div>
@@ -122,6 +208,7 @@ const NewEventPage = () => {
                 <span className="text-xs text-[#34427099]">Rp</span>
                 <input
                   type="number"
+                  min="0"
                   value={price}
                   onChange={(e) => setPrice(e.target.value)}
                   placeholder="0 untuk gratis"
@@ -138,6 +225,7 @@ const NewEventPage = () => {
                 <Users className="w-4 h-4 text-[#50A3FB]" />
                 <input
                   type="number"
+                  min="1"
                   value={quota}
                   onChange={(e) => setQuota(e.target.value)}
                   placeholder="Contoh: 100"
@@ -155,13 +243,17 @@ const NewEventPage = () => {
             <div className="flex items-center gap-2 rounded-2xl border border-[#E4E7F5] bg-white/80 px-4 py-2.5 focus-within:ring-2 focus-within:ring-[#50A3FB]/60 focus-within:border-transparent">
               <ImageIcon className="w-4 h-4 text-[#50A3FB]" />
               <input
-                type="text"
+                type="url"
                 value={bannerUrl}
                 onChange={(e) => setBannerUrl(e.target.value)}
-                placeholder="Link gambar poster event"
+                placeholder="https://... (Link gambar poster event)"
                 className="w-full bg-transparent outline-none text-sm text-[#344270] placeholder:text-[#34427066]"
               />
             </div>
+            <p className="text-[10px] text-[#34427080] ml-1">
+              *Fitur upload file langsung belum tersedia, gunakan URL gambar
+              (misal dari Google Drive/Imgur/dsb).
+            </p>
           </div>
 
           {/* Deskripsi */}
@@ -196,8 +288,10 @@ const NewEventPage = () => {
                 hover:opacity-95
                 disabled:opacity-60 disabled:cursor-not-allowed
                 transition-all
+                flex items-center justify-center gap-2
               "
             >
+              {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
               {submitting ? "Menyimpan..." : "Simpan Event"}
             </button>
           </div>

@@ -17,9 +17,14 @@ export interface EventItem {
 export interface EventPayload {
   title: string;
   organizer: string;
-  date: string; // simpan sebagai string (ISO / "YYYY-MM-DD" / "YYYY-MM-DD HH:mm")
+  date?: string; // ini legacy frontend, backend pakainya datetime
+  datetime?: string; // tambahkan ini agar sesuai backend
   location: string;
-  image?: string; // optional, bisa diisi URL
+  image?: string;
+  description?: string;
+  capacity?: number;
+  price?: number;
+  status?: string;
 }
 
 export interface EventRow {
