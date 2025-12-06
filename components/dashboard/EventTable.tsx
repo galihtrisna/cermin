@@ -1,14 +1,16 @@
 // components/dashboard/EventTable.tsx
 "use client";
 
+import Link from "next/link";
 import { Edit2, Trash2 } from "lucide-react";
 
 export interface EventRow {
   id: string;
   title: string;
-  date: string;
+  datetime?: string; // Sesuaikan dengan API
+  date?: string; // Legacy support
   price: number;
-  participants: string;
+  participants?: string; // Opsional jika data belum ada
   status: string;
 }
 
@@ -37,7 +39,6 @@ const EventTable = ({ events }: { events: EventRow[] }) => {
               <th className="py-3 md:py-4 pr-4 font-semibold">Judul</th>
               <th className="py-3 md:py-4 pr-4 font-semibold">Tanggal</th>
               <th className="py-3 md:py-4 pr-4 font-semibold">Harga</th>
-              <th className="py-3 md:py-4 pr-4 font-semibold">Peserta</th>
               <th className="py-3 md:py-4 pr-4 font-semibold">Status</th>
               <th className="py-3 md:py-4 pr-2 text-center font-semibold">
                 Aksi
@@ -51,28 +52,50 @@ const EventTable = ({ events }: { events: EventRow[] }) => {
                 key={event.id}
                 className="border-b border-[#F0F2FF] last:border-0"
               >
-                <td className="py-3 md:py-4 pr-4">{event.title}</td>
-                <td className="py-3 md:py-4 pr-4">{event.date}</td>
+                <td className="py-3 md:py-4 pr-4 font-medium text-[#344270]">
+                  {event.title}
+                </td>
+                <td className="py-3 md:py-4 pr-4">
+                  {/* Gunakan datetime jika ada, fallback ke date */}
+                  {event.datetime
+                    ? new Date(event.datetime).toLocaleDateString("id-ID", {
+                        day: "numeric",
+                        month: "long",
+                        year: "numeric",
+                      })
+                    : event.date}
+                </td>
                 <td className="py-3 md:py-4 pr-4">
                   Rp {event.price.toLocaleString("id-ID")}
                 </td>
-                <td className="py-3 md:py-4 pr-4">{event.participants}</td>
                 <td className="py-3 md:py-4 pr-4">
                   <span
-                    className="
+                    className={`
                       inline-flex items-center px-3 py-1
                       rounded-full text-xs font-semibold
-                      bg-[#E0F4FF] text-[#2563EB]
-                    "
+                      ${
+                        event.status.toLowerCase() === "aktif"
+                          ? "bg-[#E0F4FF] text-[#2563EB]"
+                          : event.status.toLowerCase() === "selesai"
+                          ? "bg-emerald-50 text-emerald-600"
+                          : "bg-slate-100 text-slate-500"
+                      }
+                    `}
                   >
                     {event.status}
                   </span>
                 </td>
                 <td className="py-3 md:py-4 pr-2">
                   <div className="flex items-center justify-center gap-3 text-[#344270b3]">
-                    <button className="hover:text-[#50A3FB] transition">
+                    {/* EDIT BUTTON: Mengarah ke Detail Page sesuai request */}
+                    <Link
+                      href={`/dashboard/event/${event.id}`}
+                      className="hover:text-[#50A3FB] transition"
+                      title="Lihat & Edit Detail"
+                    >
                       <Edit2 className="w-4 h-4" />
-                    </button>
+                    </Link>
+                    
                     <button className="hover:text-red-500 transition">
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -83,7 +106,7 @@ const EventTable = ({ events }: { events: EventRow[] }) => {
 
             {events.length === 0 && (
               <tr>
-                <td colSpan={6} className="py-6 text-center text-[#34427099]">
+                <td colSpan={5} className="py-6 text-center text-[#34427099]">
                   Belum ada event.
                 </td>
               </tr>

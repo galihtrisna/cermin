@@ -1,6 +1,6 @@
 "use client";
 
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Calendar,
@@ -11,9 +11,18 @@ import {
   Clock,
   Download,
   MoreHorizontal,
+  Loader2,
+  AlertTriangle,
+  ArrowLeft,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
+// Import actions
+import { getEventById, updateEvent, type EventItem } from "@/app/actions/event";
+import { checkUser } from "@/app/actions/auth";
+import type { Users as UserType } from "@/lib/definitions";
+
+// Tipe data untuk peserta (sementara mock/dummy karena belum ada endpoint khusus orders per event di action)
 interface ParticipantRow {
   id: string;
   name: string;
@@ -23,115 +32,201 @@ interface ParticipantRow {
 }
 
 // Status event
-type EventStatus = "Draf" | "Aktif" | "Selesai" | "Diblokir";
+type EventStatus = "Draf" | "Aktif" | "Selesai" | "Diblokir" | "Dibatalkan";
 
 const EventDetailPage = () => {
   const params = useParams();
+  const router = useRouter();
   const id = params?.id as string | undefined;
 
-  // Dummy data, nanti tinggal diganti fetch dari API / server
-  const event = {
-    id,
-    title: "Workshop Digital Marketing 2025",
-    subtitle: "Pelajari strategi digital marketing terkini untuk bisnis Anda",
-    date: "10 Oktober 2025, 09.00 WIB",
-    location: "Java Heritage, Purwokerto",
-    price: 55000,
-    quota: 100,
-    registered: 25,
-    status: "Diblokir" as EventStatus,
-    duration: "8 Jam",
-  };
+  // --- STATE ---
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [event, setEvent] = useState<EventItem | null>(null);
+  const [currentUser, setCurrentUser] = useState<UserType | null>(null);
 
-  const [eventStatus, setEventStatus] = useState<EventStatus>(event.status);
+  // State UI
+  const [eventStatus, setEventStatus] = useState<EventStatus>("Draf");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [sendingFeedback, setSendingFeedback] = useState(false);
+  const [feedbackInfo, setFeedbackInfo] = useState<string | null>(null);
 
-  const participants: ParticipantRow[] = [
+  // Dummy participants (nanti bisa diganti dengan fetch orders)
+  const [participants, setParticipants] = useState<ParticipantRow[]>([
     {
       id: "1",
-      name: "Nama Peserta 1",
+      name: "Contoh Peserta 1",
       email: "peserta1@example.com",
       status: "paid",
       ticketType: "Reguler",
     },
     {
       id: "2",
-      name: "Nama Peserta 2",
+      name: "Contoh Peserta 2",
       email: "peserta2@example.com",
       status: "pending",
       ticketType: "Reguler",
     },
-    {
-      id: "3",
-      name: "Nama Peserta 3",
-      email: "peserta3@example.com",
-      status: "paid",
-      ticketType: "VIP",
-    },
-  ];
+  ]);
 
-  const verifiedCount = participants.filter((p) => p.status === "paid").length;
-  const [sendingFeedback, setSendingFeedback] = useState(false);
-  const [feedbackInfo, setFeedbackInfo] = useState<string | null>(null);
-  const [menuOpen, setMenuOpen] = useState(false);
+  // --- FETCH DATA & PROTEKSI ---
+  useEffect(() => {
+    const init = async () => {
+      if (!id) return;
+      try {
+        setLoading(true);
+        // 1. Ambil data user & event paralel
+        const [userData, eventData] = await Promise.all([
+          checkUser(),
+          getEventById(id),
+        ]);
 
-  const getStatusClasses = (status: EventStatus) => {
-    switch (status) {
-      case "Draf":
+        // 2. Proteksi Akses (Owner / Superadmin only)
+        const isOwner = userData.id === eventData.owner_id;
+        const isSuperAdmin = userData.role === "superadmin";
+
+        if (!isOwner && !isSuperAdmin) {
+          // Redirect jika bukan haknya
+          router.replace("/dashboard");
+          return;
+        }
+
+        setCurrentUser(userData);
+        setEvent(eventData);
+        setEventStatus(eventData.status as EventStatus); // Set status awal dari DB
+      } catch (err: any) {
+        console.error(err);
+        setError("Gagal memuat detail event.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    init();
+  }, [id, router]);
+
+  // --- HANDLERS ---
+
+  // Update Status Event ke Backend
+  const handleStatusChange = async (newStatus: EventStatus) => {
+    if (!event || !id) return;
+
+    // Update UI optimistic
+    setEventStatus(newStatus);
+
+    try {
+      await updateEvent(id, { status: newStatus });
+      // console.log("Status updated to", newStatus);
+    } catch (err) {
+      console.error("Gagal update status:", err);
+      alert("Gagal mengubah status event");
+      setEventStatus(event.status as EventStatus); // Rollback jika gagal
+    }
+  };
+
+  const getStatusClasses = (status: string) => {
+    switch (status.toLowerCase()) {
+      case "draf":
         return "bg-slate-100 text-slate-700";
-      case "Aktif":
+      case "aktif":
         return "bg-[#E0F4FF] text-[#2563EB]";
-      case "Selesai":
+      case "selesai":
         return "bg-emerald-50 text-emerald-700";
-      case "Diblokir":
+      case "diblokir":
         return "bg-red-50 text-red-600";
       default:
         return "bg-slate-100 text-slate-700";
     }
   };
 
-  const getDotColor = (status: EventStatus) => {
-    switch (status) {
-      case "Draf":
+  const getDotColor = (status: string) => {
+    switch (status.toLowerCase()) {
+      case "draf":
         return "bg-slate-400";
-      case "Aktif":
+      case "aktif":
         return "bg-emerald-500";
-      case "Selesai":
+      case "selesai":
         return "bg-emerald-600";
-      case "Diblokir":
+      case "diblokir":
         return "bg-red-500";
       default:
         return "bg-slate-400";
     }
   };
 
+  const formatDate = (isoString: string) => {
+    return (
+      new Date(isoString).toLocaleDateString("id-ID", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }) + " WIB"
+    );
+  };
+
+  // --- RENDER ---
+
+  if (loading) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center text-slate-500">
+        <Loader2 className="w-8 h-8 animate-spin mb-2 text-[#50A3FB]" />
+        <p className="text-sm">Memuat detail event...</p>
+      </div>
+    );
+  }
+
+  if (error || !event) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center text-slate-500 gap-4">
+        <AlertTriangle className="w-10 h-10 text-red-400" />
+        <p>{error || "Event tidak ditemukan"}</p>
+        <Link
+          href="/dashboard/event"
+          className="text-[#50A3FB] hover:underline"
+        >
+          Kembali ke daftar event
+        </Link>
+      </div>
+    );
+  }
+
+  // Hitungan ringkasan (Dummy logic based on dummy participants)
+  // Nanti jika sudah ada API orders, ganti logic ini
+  const verifiedCount = participants.filter((p) => p.status === "paid").length;
+  // Jika event.capacity ada, gunakan. Jika tidak, default 100.
+  const quota = event.capacity || 100;
+  // Registered bisa diambil dari participants.length atau field registered di event jika ada (backend belum kirim field ini, jadi pakai dummy length)
+  const registeredCount = participants.length;
+
   return (
     <>
       {/* Header atas */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-4 mb-2">
         <div className="space-y-1">
-          <p className="text-xs md:text-sm text-[#34427080]">
-            Dashboard / Event Saya /{" "}
+          <p className="text-xs md:text-sm text-[#34427080] flex items-center gap-1">
+            <Link href="/dashboard/event" className="hover:text-[#50A3FB]">
+              Event Saya
+            </Link>
+            <span>/</span>
             <span className="font-semibold text-[#344270]">Detail Event</span>
           </p>
           <h1 className="text-2xl md:text-3xl font-semibold text-[#344270]">
             {event.title}
           </h1>
-          <p className="text-sm md:text-[15px] text-[#34427099]">
-            {event.subtitle}
+          <p className="text-sm md:text-[15px] text-[#34427099] line-clamp-1">
+            {event.description || "Tidak ada deskripsi singkat."}
           </p>
         </div>
 
         <div className="flex items-center gap-2 md:gap-3">
-          {/* STATUS BADGE */}
+          {/* STATUS BADGE / DROPDOWN */}
           {eventStatus === "Diblokir" ? (
-            // Kalau diblokir: badge statis, nggak bisa diubah
             <div
-              className={`
-                inline-flex items-center px-3 py-1.5 
-                rounded-full text-xs font-semibold
-                border border-[#FCA5A5]
-                ${getStatusClasses(eventStatus)}
-              `}
+              className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold border border-[#FCA5A5] ${getStatusClasses(
+                eventStatus
+              )}`}
             >
               <span
                 className={`w-2 h-2 rounded-full mr-2 ${getDotColor(
@@ -141,14 +236,10 @@ const EventDetailPage = () => {
               <span>Diblokir</span>
             </div>
           ) : (
-            // Selain diblokir: dropdown status
             <div
-              className={`
-                inline-flex items-center px-3 py-1.5 
-                rounded-full text-xs font-semibold
-                border border-[#E4E7F5]
-                ${getStatusClasses(eventStatus)}
-              `}
+              className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold border border-[#E4E7F5] ${getStatusClasses(
+                eventStatus
+              )}`}
             >
               <span
                 className={`w-2 h-2 rounded-full mr-2 ${getDotColor(
@@ -157,31 +248,23 @@ const EventDetailPage = () => {
               />
               <select
                 value={eventStatus}
-                onChange={(e) => setEventStatus(e.target.value as EventStatus)}
-                className="
-                  bg-transparent border-none outline-none
-                  text-xs font-semibold
-                  pr-4
-                  cursor-pointer
-                  appearance-none
-                "
+                onChange={(e) =>
+                  handleStatusChange(e.target.value as EventStatus)
+                }
+                className="bg-transparent border-none outline-none text-xs font-semibold pr-2 cursor-pointer appearance-none"
               >
                 <option value="Draf">Draf</option>
                 <option value="Aktif">Aktif</option>
                 <option value="Selesai">Selesai</option>
+                <option value="Dibatalkan">Dibatalkan</option>
               </select>
             </div>
           )}
 
+          {/* EDIT BUTTON (FUNGSIONAL) */}
           <Link
-            href={`/dashboard/event/${id ?? ""}/edit`}
-            className="
-              hidden md:inline-flex items-center gap-2
-              rounded-full border border-[#E4E7F5]
-              bg-white/80 text-[#344270]
-              px-4 py-2 text-xs md:text-sm font-semibold
-              hover:bg-white transition
-            "
+            href={`/dashboard/event/${id}/edit`}
+            className="hidden md:inline-flex items-center gap-2 rounded-full border border-[#E4E7F5] bg-white/80 text-[#344270] px-4 py-2 text-xs md:text-sm font-semibold hover:bg-white transition"
           >
             Edit Event
           </Link>
@@ -191,65 +274,39 @@ const EventDetailPage = () => {
             <button
               type="button"
               onClick={() => setMenuOpen((prev) => !prev)}
-              className="
-                inline-flex items-center justify-center
-                w-9 h-9 rounded-full
-                border border-[#E4E7F5]
-                bg-white/80 text-[#34427080]
-                hover:bg-white hover:text-[#344270]
-                transition
-              "
+              className="inline-flex items-center justify-center w-9 h-9 rounded-full border border-[#E4E7F5] bg-white/80 text-[#34427080] hover:bg-white hover:text-[#344270] transition"
             >
               <MoreHorizontal className="w-4 h-4" />
             </button>
 
             {menuOpen && (
-              <div
-                className="
-                  absolute right-0 mt-2 w-56
-                  rounded-2xl bg-white
-                  border border-[#E4E7F5]
-                  shadow-[0_18px_45px_rgba(15,23,42,0.16)]
-                  py-2 z-20
-                "
-              >
+              <div className="absolute right-0 mt-2 w-56 rounded-2xl bg-white border border-[#E4E7F5] shadow-[0_18px_45px_rgba(15,23,42,0.16)] py-2 z-20">
                 <Link
-                  href={`/dashboard/event/${id ?? ""}/checkin`}
+                  href={`/dashboard/event/${id}/checkin`}
                   onClick={() => setMenuOpen(false)}
-                  className="
-                    flex items-center gap-2
-                    w-full px-4 py-2.5 text-xs md:text-sm
-                    text-[#344270cc] hover:bg-[#F5F6FF]
-                  "
+                  className="flex items-center gap-2 w-full px-4 py-2.5 text-xs md:text-sm text-[#344270cc] hover:bg-[#F5F6FF]"
                 >
                   <TicketPercent className="w-4 h-4 text-[#50A3FB]" />
                   <span>Scan Tiket / Check-in</span>
                 </Link>
 
                 <Link
-                  href={`/dashboard/event/${id ?? ""}/certificates`}
+                  href={`/dashboard/event/${id}/certificates`}
                   onClick={() => setMenuOpen(false)}
-                  className="
-                    flex items-center gap-2
-                    w-full px-4 py-2.5 text-xs md:text-sm
-                    text-[#344270cc] hover:bg-[#F5F6FF]
-                  "
+                  className="flex items-center gap-2 w-full px-4 py-2.5 text-xs md:text-sm text-[#344270cc] hover:bg-[#F5F6FF]"
                 >
                   <CheckCircle2 className="w-4 h-4 text-[#50A3FB]" />
                   <span>Pengaturan Sertifikat</span>
                 </Link>
 
                 <Link
-                  href={`/seminar/${id ?? ""}`}
+                  href={`/events/${id}`} // Arahkan ke public page yang sebenarnya
+                  target="_blank"
                   onClick={() => setMenuOpen(false)}
-                  className="
-                    flex items-center gap-2
-                    w-full px-4 py-2.5 text-xs md:text-sm
-                    text-[#344270cc] hover:bg-[#F5F6FF]
-                  "
+                  className="flex items-center gap-2 w-full px-4 py-2.5 text-xs md:text-sm text-[#344270cc] hover:bg-[#F5F6FF]"
                 >
                   <Calendar className="w-4 h-4 text-[#50A3FB]" />
-                  <span>Lihat Halaman Publik Event</span>
+                  <span>Lihat Halaman Publik</span>
                 </Link>
               </div>
             )}
@@ -259,15 +316,8 @@ const EventDetailPage = () => {
 
       {/* 2 Kolom: Info event + ringkasan */}
       <section className="grid md:grid-cols-3 gap-4 md:gap-6">
-        {/* Info Event */}
-        <div
-          className="
-            md:col-span-2
-            rounded-3xl bg-white/90 border border-white/70
-            backdrop-blur-2xl shadow-[0_16px_45px_rgba(0,0,0,0.08)]
-            px-5 md:px-6 py-5 md:py-6
-          "
-        >
+        {/* Info Event (Dinamis) */}
+        <div className="md:col-span-2 rounded-3xl bg-white/90 border border-white/70 backdrop-blur-2xl shadow-[0_16px_45px_rgba(0,0,0,0.08)] px-5 md:px-6 py-5 md:py-6">
           <h2 className="text-sm font-semibold text-[#34427099] mb-3">
             Info Event
           </h2>
@@ -276,7 +326,9 @@ const EventDetailPage = () => {
               <Calendar className="w-4 h-4 text-[#50A3FB] mt-[2px]" />
               <div>
                 <p className="text-xs text-[#34427099]">Tanggal & Waktu</p>
-                <p className="font-medium text-[#344270]">{event.date}</p>
+                <p className="font-medium text-[#344270]">
+                  {event.datetime ? formatDate(event.datetime) : "Belum diatur"}
+                </p>
               </div>
             </div>
 
@@ -292,7 +344,8 @@ const EventDetailPage = () => {
               <Clock className="w-4 h-4 text-[#50A3FB] mt-[2px]" />
               <div>
                 <p className="text-xs text-[#34427099]">Durasi</p>
-                <p className="font-medium text-[#344270]">{event.duration}</p>
+                {/* Duration tidak ada di DB, kita hardcode atau hitung nanti */}
+                <p className="font-medium text-[#344270]">Sesuai jadwal</p>
               </div>
             </div>
 
@@ -310,15 +363,8 @@ const EventDetailPage = () => {
           </div>
         </div>
 
-        {/* Ringkasan Peserta */}
-        <div
-          className="
-            rounded-3xl bg-white/90 border border-white/70
-            backdrop-blur-2xl shadow-[0_16px_45px_rgba(0,0,0,0.08)]
-            px-5 md:px-6 py-5 md:py-6
-            flex flex-col justify-between gap-4
-          "
-        >
+        {/* Ringkasan Peserta (Dinamis dari state/dummy) */}
+        <div className="rounded-3xl bg-white/90 border border-white/70 backdrop-blur-2xl shadow-[0_16px_45px_rgba(0,0,0,0.08)] px-5 md:px-6 py-5 md:py-6 flex flex-col justify-between gap-4">
           <div>
             <h2 className="text-sm font-semibold text-[#34427099] mb-3">
               Ringkasan Peserta
@@ -327,7 +373,7 @@ const EventDetailPage = () => {
               <div className="flex items-center justify-between">
                 <span>Total Terdaftar</span>
                 <span className="font-semibold text-[#344270]">
-                  {event.registered}/{event.quota}
+                  {registeredCount}/{quota}
                 </span>
               </div>
               <div className="flex items-center justify-between">
@@ -339,7 +385,7 @@ const EventDetailPage = () => {
               <div className="flex items-center justify-between">
                 <span>Menunggu pembayaran</span>
                 <span className="font-semibold text-[#F97316]">
-                  {event.registered - verifiedCount} peserta
+                  {registeredCount - verifiedCount} peserta
                 </span>
               </div>
             </div>
@@ -347,43 +393,26 @@ const EventDetailPage = () => {
 
           <button
             type="button"
-            className="
-              mt-2 inline-flex items-center justify-center
-              w-full rounded-2xl
-              pastel-gradient text-[#344270]
-              font-semibold text-sm py-2.5
-              shadow-[0_12px_30px_rgba(148,163,216,0.45)]
-              hover:opacity-95 transition
-            "
+            className="mt-2 inline-flex items-center justify-center w-full rounded-2xl pastel-gradient text-[#344270] font-semibold text-sm py-2.5 shadow-[0_12px_30px_rgba(148,163,216,0.45)] hover:opacity-95 transition"
           >
             <Download className="w-4 h-4 mr-2" />
             Export Data Peserta (.CSV)
           </button>
+
           <button
             type="button"
             disabled={sendingFeedback}
             onClick={() => {
               setFeedbackInfo(null);
               setSendingFeedback(true);
-              // TODO: call API kirim WA/email feedback link
               setTimeout(() => {
                 setSendingFeedback(false);
                 setFeedbackInfo(
-                  "Link feedback dikirim ke semua peserta yang terdaftar (dummy)."
+                  "Link feedback dikirim ke semua peserta (dummy)."
                 );
               }, 800);
             }}
-            className="
-    w-full md:w-auto mt-3
-    inline-flex items-center justify-center
-    rounded-2xl
-    bg-white text-[#344270]
-    border border-[#E4E7F5]
-    px-4 py-2.5 text-xs md:text-sm font-semibold
-    hover:bg-[#F5F6FF]
-    disabled:opacity-60 disabled:cursor-not-allowed
-    transition
-  "
+            className="w-full md:w-auto mt-3 inline-flex items-center justify-center rounded-2xl bg-white text-[#344270] border border-[#E4E7F5] px-4 py-2.5 text-xs md:text-sm font-semibold hover:bg-[#F5F6FF] disabled:opacity-60 disabled:cursor-not-allowed transition"
           >
             {sendingFeedback
               ? "Mengirim link..."
@@ -395,13 +424,9 @@ const EventDetailPage = () => {
           )}
         </div>
       </section>
-      <section
-        className="
-    rounded-3xl bg-white/90 border border-white/70
-    backdrop-blur-2xl shadow-[0_16px_45px_rgba(0,0,0,0.08)]
-    px-4 md:px-6 py-5 md:py-6
-  "
-      >
+
+      {/* Tim Presensi */}
+      <section className="rounded-3xl bg-white/90 border border-white/70 backdrop-blur-2xl shadow-[0_16px_45px_rgba(0,0,0,0.08)] px-4 md:px-6 py-5 md:py-6 mt-4 md:mt-6">
         <div className="flex items-center justify-between mb-3">
           <div>
             <h2 className="text-sm md:text-base font-semibold text-[#344270]">
@@ -413,26 +438,25 @@ const EventDetailPage = () => {
           </div>
         </div>
 
-        {/* dummy list petugas */}
         <div className="space-y-3 mb-4 text-sm text-[#344270cc]">
-          {/* Owner */}
+          {/* Owner (Dinamis dari session) */}
           <div className="flex items-center justify-between">
             <div>
-              <p className="font-semibold text-[#344270]">Galih Trisna</p>
+              <p className="font-semibold text-[#344270]">
+                {currentUser?.name || "Organizer"}
+              </p>
               <p className="text-[11px] text-[#34427080]">
-                galih@example.com • Organizer
+                {currentUser?.email} • Organizer
               </p>
             </div>
-
             <div className="flex items-center gap-2">
               <span className="rounded-full bg-[#E0F4FF] text-[#2563EB] text-[11px] px-3 py-1 font-semibold">
                 OWNER
               </span>
-              {/* Owner tidak bisa dihapus */}
             </div>
           </div>
 
-          {/* Scanner */}
+          {/* Dummy Scanner */}
           <div className="flex items-center justify-between">
             <div>
               <p className="font-semibold text-[#344270]">Petugas Scan 1</p>
@@ -440,85 +464,43 @@ const EventDetailPage = () => {
                 scan1@example.com • Petugas Scan
               </p>
             </div>
-
             <div className="flex items-center gap-2">
               <span className="rounded-full bg-[#FEF3C7] text-[#D97706] text-[11px] px-3 py-1 font-semibold">
                 SCANNER
               </span>
-
-              {/* Tombol hapus */}
               <button
-                type="button"
                 onClick={() => alert("Dummy: Petugas dihapus.")}
-                className="
-            p-2 rounded-xl
-            text-[#34427080]
-            hover:bg-red-50 hover:text-red-500
-            transition
-          "
+                className="p-2 rounded-xl text-[#34427080] hover:bg-red-50 hover:text-red-500 transition"
               >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="w-4 h-4"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <polyline points="3 6 5 6 21 6" />
-                  <path d="M19 6l-1 14H6L5 6" />
-                  <path d="M10 11v6" />
-                  <path d="M14 11v6" />
-                  <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
-                </svg>
+                <TrashIcon />
               </button>
             </div>
           </div>
         </div>
 
-        {/* Form undang petugas baru */}
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            alert("Dummy: invite dikirim ke email petugas scan.");
+            alert("Dummy: invite dikirim.");
           }}
           className="flex flex-col md:flex-row gap-2 md:gap-3"
         >
           <input
             type="email"
             placeholder="Email petugas scan..."
-            className="
-        flex-1 rounded-2xl border border-[#E4E7F5]
-        bg-white/80 px-4 py-2.5
-        text-sm text-[#344270]
-        placeholder:text-[#34427066]
-        focus:outline-none focus:ring-2 focus:ring-[#50A3FB]/60 focus:border-transparent
-      "
+            className="flex-1 rounded-2xl border border-[#E4E7F5] bg-white/80 px-4 py-2.5 text-sm text-[#344270] placeholder:text-[#34427066] focus:outline-none focus:ring-2 focus:ring-[#50A3FB]/60 focus:border-transparent"
           />
           <button
             type="submit"
-            className="
-        rounded-2xl bg-[#50A3FB] text-white
-        text-sm font-semibold px-4 md:px-5 py-2.5
-        shadow-[0_10px_26px_rgba(80,163,251,0.55)]
-        hover:opacity-95 transition
-      "
+            className="rounded-2xl bg-[#50A3FB] text-white text-sm font-semibold px-4 md:px-5 py-2.5 shadow-[0_10px_26px_rgba(80,163,251,0.55)] hover:opacity-95 transition"
           >
             Tambah Petugas
           </button>
         </form>
       </section>
 
-      {/* Peserta Terbaru */}
-      <section
-        className="
-          rounded-[28px] bg-white/90 border border-white/70
-          backdrop-blur-2xl shadow-[0_16px_45px_rgba(0,0,0,0.08)]
-          px-4 md:px-6 lg:px-8 py-5 md:py-6
-        "
-      >
+      {/* Peserta Terbaru (Table) */}
+      <section className="rounded-[28px] bg-white/90 border border-white/70 backdrop-blur-2xl shadow-[0_16px_45px_rgba(0,0,0,0.08)] px-4 md:px-6 lg:px-8 py-5 md:py-6 mt-4 md:mt-6">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
             <h2 className="text-lg md:text-xl font-semibold text-[#344270]">
@@ -528,13 +510,9 @@ const EventDetailPage = () => {
               Beberapa peserta terakhir yang mendaftar event ini.
             </p>
           </div>
-
           <Link
-            href={`/dashboard/event/${id ?? ""}/participants`}
-            className="
-              text-xs md:text-sm font-semibold
-              text-[#50A3FB] hover:text-[#2563EB]
-            "
+            href={`/dashboard/event/${id}/participants`}
+            className="text-xs md:text-sm font-semibold text-[#50A3FB] hover:text-[#2563EB]"
           >
             Lihat semua
           </Link>
@@ -573,7 +551,6 @@ const EventDetailPage = () => {
                   </td>
                 </tr>
               ))}
-
               {participants.length === 0 && (
                 <tr>
                   <td
@@ -591,5 +568,27 @@ const EventDetailPage = () => {
     </>
   );
 };
+
+// Helper component icon
+function TrashIcon() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      className="w-4 h-4"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <polyline points="3 6 5 6 21 6" />
+      <path d="M19 6l-1 14H6L5 6" />
+      <path d="M10 11v6" />
+      <path d="M14 11v6" />
+      <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
+    </svg>
+  );
+}
 
 export default EventDetailPage;

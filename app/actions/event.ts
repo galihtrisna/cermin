@@ -6,11 +6,14 @@ import { createAxiosJWT } from "@/lib/axiosJwt";
 export interface EventItem {
   id: string;
   title: string;
-  organizer: string;
-  date: string;
+  description?: string;
+  datetime: string;
   location: string;
-  participants: number;
-  image: string;
+  capacity: number;
+  price: number;
+  status: string;
+  owner_id: string; // Penting untuk otorisasi
+  image?: string; // Jika backend support
 }
 
 // Payload untuk create/update event
@@ -62,15 +65,9 @@ export async function getAllEvents(): Promise<EventItem[]> {
 // =======================
 export async function getEventById(id: string): Promise<EventItem> {
   try {
-    const axiosJWT = await createAxiosJWT();
-
-    // GET /api/events/:id
+    const axiosJWT = createAxiosJWT();
     const response = await axiosJWT.get(`/api/events/${id}`);
-
-    // Asumsi: { message: "...", data: { ...event } }
-    const { data } = response.data;
-
-    return data as EventItem;
+    return response.data.data as EventItem;
   } catch (error) {
     console.error("getEventById error:", error);
     throw error;
@@ -105,17 +102,9 @@ export async function updateEvent(
   payload: Partial<EventPayload>
 ): Promise<EventItem> {
   try {
-    const axiosJWT = await createAxiosJWT();
-
-    // Kalau di backend pakai PUT:
-    // const response = await axiosJWT.put(`/api/events/${id}`, payload);
-    // Kalau pakai PATCH:
-    const response = await axiosJWT.patch(`/api/events/${id}`, payload);
-
-    // Asumsi: { message: "...", data: { ...eventUpdated } }
-    const { data } = response.data;
-
-    return data as EventItem;
+    const axiosJWT = createAxiosJWT();
+    const response = await axiosJWT.put(`/api/events/${id}`, payload);
+    return response.data.data as EventItem;
   } catch (error) {
     console.error("updateEvent error:", error);
     throw error;
