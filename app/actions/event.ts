@@ -39,6 +39,19 @@ export interface EventRow {
   status: string;
 }
 
+export interface ParticipantOrder {
+  id: string;
+  status: string; // paid, pending
+  created_at: string;
+  participant: {
+    id: string;
+    name: string;
+    email: string;
+    phone: string;
+  };
+  // Tambahkan field lain sesuai respon API orders
+}
+
 // =======================
 // GET: semua event
 // =======================
@@ -132,4 +145,26 @@ export async function getMyEvents(): Promise<EventRow[]> {
   const axiosJWT = await createAxiosJWT();
   const response = await axiosJWT.get("/api/events/mine");
   return response.data.data as EventRow[];
+}
+
+export async function getEventOrders(
+  eventId: string
+): Promise<ParticipantOrder[]> {
+  try {
+    const axiosJWT = await createAxiosJWT();
+    // Panggil endpoint orders dengan filter event_id & expand participant
+    const response = await axiosJWT.get(`/api/orders`, {
+      params: {
+        event_id: eventId,
+        expand: true,
+        limit: 1000, // Ambil banyak sekalian untuk rekap
+      },
+    });
+
+    // API order.controller mengembalikan { data: [...] }
+    return response.data.data as ParticipantOrder[];
+  } catch (error) {
+    console.error("getEventOrders error:", error);
+    return [];
+  }
 }

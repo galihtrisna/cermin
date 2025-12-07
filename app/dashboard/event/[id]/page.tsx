@@ -5,7 +5,6 @@ import Link from "next/link";
 import {
   Calendar,
   MapPin,
-  Users,
   TicketPercent,
   CheckCircle2,
   Clock,
@@ -13,37 +12,40 @@ import {
   MoreHorizontal,
   Loader2,
   AlertTriangle,
-  ArrowLeft,
+  Trash2,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 
 // Import actions
 import { getEventById, updateEvent, type EventItem } from "@/app/actions/event";
+import { getOrdersByEvent, type OrderItem } from "@/app/actions/order"; // Action baru
 import { checkUser } from "@/app/actions/auth";
 import type { Users as UserType } from "@/lib/definitions";
 
-// Tipe data untuk peserta (sementara mock/dummy karena belum ada endpoint khusus orders per event di action)
-interface ParticipantRow {
-  id: string;
-  name: string;
-  email: string;
-  status: "paid" | "pending";
-  ticketType: string;
-}
-
-// Status event
+// Status event sesuai DB
 type EventStatus = "Draf" | "Aktif" | "Selesai" | "Diblokir" | "Dibatalkan";
+
+// Tipe untuk Scanner (Frontend-side state sementara)
+interface ScannerMember {
+  id: string;
+  email: string;
+  role: "Scanner" | "Owner";
+}
 
 const EventDetailPage = () => {
   const params = useParams();
   const router = useRouter();
   const id = params?.id as string | undefined;
 
-  // --- STATE ---
+  // --- STATE DATA ---
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
   const [event, setEvent] = useState<EventItem | null>(null);
   const [currentUser, setCurrentUser] = useState<UserType | null>(null);
+  
+  // Data Peserta (Real dari DB)
+  const [orders, setOrders] = useState<OrderItem[]>([]);
 
   // State UI
   const [eventStatus, setEventStatus] = useState<EventStatus>("Draf");
@@ -51,23 +53,9 @@ const EventDetailPage = () => {
   const [sendingFeedback, setSendingFeedback] = useState(false);
   const [feedbackInfo, setFeedbackInfo] = useState<string | null>(null);
 
-  // Dummy participants (nanti bisa diganti dengan fetch orders)
-  const [participants, setParticipants] = useState<ParticipantRow[]>([
-    {
-      id: "1",
-      name: "Contoh Peserta 1",
-      email: "peserta1@example.com",
-      status: "paid",
-      ticketType: "Reguler",
-    },
-    {
-      id: "2",
-      name: "Contoh Peserta 2",
-      email: "peserta2@example.com",
-      status: "pending",
-      ticketType: "Reguler",
-    },
-  ]);
+  // State Tim Presensi (Simulasi Frontend karena Backend belum ada tabel Scanner)
+  const [scanners, setScanners] = useState<ScannerMember[]>([]);
+  const [newScannerEmail, setNewScannerEmail] = useState("");
 
   // --- FETCH DATA & PROTEKSI ---
   useEffect(() => {
@@ -75,25 +63,35 @@ const EventDetailPage = () => {
       if (!id) return;
       try {
         setLoading(true);
-        // 1. Ambil data user & event paralel
-        const [userData, eventData] = await Promise.all([
+        // 1. Ambil data User, Event, dan Orders (Peserta) secara paralel
+        const [userData, eventData, ordersData] = await Promise.all([
           checkUser(),
           getEventById(id),
+          getOrdersByEvent(id),
         ]);
 
-        // 2. Proteksi Akses (Owner / Superadmin only)
+        // 2. Proteksi Akses (Hanya Owner & Superadmin)
         const isOwner = userData.id === eventData.owner_id;
         const isSuperAdmin = userData.role === "superadmin";
 
         if (!isOwner && !isSuperAdmin) {
-          // Redirect jika bukan haknya
           router.replace("/dashboard");
           return;
         }
 
+        // 3. Set Data ke State
         setCurrentUser(userData);
         setEvent(eventData);
-        setEventStatus(eventData.status as EventStatus); // Set status awal dari DB
+        setOrders(ordersData);
+        setEventStatus(eventData.status as EventStatus);
+
+        // 4. Set Dummy Scanners (Agar fitur terlihat jalan)
+        // Di real implementation, ini fetch dari tabel event_scanners
+        setScanners([
+          { id: "owner-1", email: userData.email, role: "Owner" },
+          { id: "scanner-1", email: "petugas1@cermin.id", role: "Scanner" }
+        ]);
+
       } catch (err: any) {
         console.error(err);
         setError("Gagal memuat detail event.");
@@ -105,68 +103,98 @@ const EventDetailPage = () => {
     init();
   }, [id, router]);
 
+  // --- LOGIC CALCULATIONS ---
+  // Menghitung statistik dari data real
+  const quota = event?.capacity || 0;
+  const registeredCount = orders.length;
+  const verifiedCount = orders.filter((o) => 
+    ["paid", "settlement", "success"].includes(o.status.toLowerCase())
+  ).length;
+  const pendingCount = registeredCount - verifiedCount;
+
   // --- HANDLERS ---
 
-  // Update Status Event ke Backend
+  // 1. Update Status Event (Real ke Backend)
   const handleStatusChange = async (newStatus: EventStatus) => {
     if (!event || !id) return;
-
-    // Update UI optimistic
-    setEventStatus(newStatus);
+    setEventStatus(newStatus); // Optimistic UI Update
 
     try {
       await updateEvent(id, { status: newStatus });
-      // console.log("Status updated to", newStatus);
     } catch (err) {
       console.error("Gagal update status:", err);
-      alert("Gagal mengubah status event");
-      setEventStatus(event.status as EventStatus); // Rollback jika gagal
+      alert("Gagal mengubah status event. Coba lagi.");
+      setEventStatus(event.status as EventStatus); // Rollback
     }
   };
 
+  // 2. Tambah Petugas Scan (Client-side Logic)
+  const handleAddScanner = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newScannerEmail.trim()) return;
+
+    // Simulasi penambahan
+    const newScanner: ScannerMember = {
+      id: Date.now().toString(),
+      email: newScannerEmail,
+      role: "Scanner"
+    };
+
+    setScanners([...scanners, newScanner]);
+    setNewScannerEmail(""); // Reset input
+    
+    // Feedback visual
+    alert(`Undangan dikirim ke ${newScanner.email} (Simulasi)`);
+  };
+
+  // 3. Hapus Petugas Scan (Client-side Logic)
+  const handleRemoveScanner = (scannerId: string) => {
+    if (confirm("Hapus akses petugas ini?")) {
+      setScanners(scanners.filter(s => s.id !== scannerId));
+    }
+  };
+
+  // 4. Kirim Feedback (Simulasi)
+  const handleSendFeedback = () => {
+    setFeedbackInfo(null);
+    setSendingFeedback(true);
+    // Simulasi delay API call
+    setTimeout(() => {
+      setSendingFeedback(false);
+      setFeedbackInfo(`Link feedback berhasil dikirim ke ${verifiedCount} peserta terverifikasi.`);
+    }, 1000);
+  };
+
+  // 5. Helper UI
   const getStatusClasses = (status: string) => {
-    switch (status.toLowerCase()) {
-      case "draf":
-        return "bg-slate-100 text-slate-700";
-      case "aktif":
-        return "bg-[#E0F4FF] text-[#2563EB]";
-      case "selesai":
-        return "bg-emerald-50 text-emerald-700";
-      case "diblokir":
-        return "bg-red-50 text-red-600";
-      default:
-        return "bg-slate-100 text-slate-700";
+    switch (status?.toLowerCase()) {
+      case "draf": return "bg-slate-100 text-slate-700";
+      case "aktif": return "bg-[#E0F4FF] text-[#2563EB]";
+      case "selesai": return "bg-emerald-50 text-emerald-700";
+      case "diblokir": return "bg-red-50 text-red-600";
+      default: return "bg-slate-100 text-slate-700";
     }
   };
 
   const getDotColor = (status: string) => {
-    switch (status.toLowerCase()) {
-      case "draf":
-        return "bg-slate-400";
-      case "aktif":
-        return "bg-emerald-500";
-      case "selesai":
-        return "bg-emerald-600";
-      case "diblokir":
-        return "bg-red-500";
-      default:
-        return "bg-slate-400";
+    switch (status?.toLowerCase()) {
+      case "draf": return "bg-slate-400";
+      case "aktif": return "bg-emerald-500";
+      case "selesai": return "bg-emerald-600";
+      case "diblokir": return "bg-red-500";
+      default: return "bg-slate-400";
     }
   };
 
   const formatDate = (isoString: string) => {
-    return (
-      new Date(isoString).toLocaleDateString("id-ID", {
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      }) + " WIB"
-    );
+    if (!isoString) return "-";
+    return new Date(isoString).toLocaleDateString("id-ID", {
+      day: "numeric", month: "long", year: "numeric",
+      hour: "2-digit", minute: "2-digit",
+    }) + " WIB";
   };
 
-  // --- RENDER ---
+  // --- RENDER VIEW ---
 
   if (loading) {
     return (
@@ -182,27 +210,16 @@ const EventDetailPage = () => {
       <div className="min-h-[60vh] flex flex-col items-center justify-center text-slate-500 gap-4">
         <AlertTriangle className="w-10 h-10 text-red-400" />
         <p>{error || "Event tidak ditemukan"}</p>
-        <Link
-          href="/dashboard/event"
-          className="text-[#50A3FB] hover:underline"
-        >
+        <Link href="/dashboard/event" className="text-[#50A3FB] hover:underline">
           Kembali ke daftar event
         </Link>
       </div>
     );
   }
 
-  // Hitungan ringkasan (Dummy logic based on dummy participants)
-  // Nanti jika sudah ada API orders, ganti logic ini
-  const verifiedCount = participants.filter((p) => p.status === "paid").length;
-  // Jika event.capacity ada, gunakan. Jika tidak, default 100.
-  const quota = event.capacity || 100;
-  // Registered bisa diambil dari participants.length atau field registered di event jika ada (backend belum kirim field ini, jadi pakai dummy length)
-  const registeredCount = participants.length;
-
   return (
     <>
-      {/* Header atas */}
+      {/* --- HEADER --- */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-4 mb-2">
         <div className="space-y-1">
           <p className="text-xs md:text-sm text-[#34427080] flex items-center gap-1">
@@ -221,36 +238,19 @@ const EventDetailPage = () => {
         </div>
 
         <div className="flex items-center gap-2 md:gap-3">
-          {/* STATUS BADGE / DROPDOWN */}
-          {eventStatus === "Diblokir" ? (
-            <div
-              className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold border border-[#FCA5A5] ${getStatusClasses(
-                eventStatus
-              )}`}
-            >
-              <span
-                className={`w-2 h-2 rounded-full mr-2 ${getDotColor(
-                  eventStatus
-                )}`}
-              />
-              <span>Diblokir</span>
-            </div>
-          ) : (
-            <div
-              className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold border border-[#E4E7F5] ${getStatusClasses(
-                eventStatus
-              )}`}
-            >
-              <span
-                className={`w-2 h-2 rounded-full mr-2 ${getDotColor(
-                  eventStatus
-                )}`}
-              />
+          {/* STATUS SELECTOR */}
+          <div
+            className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold border border-[#E4E7F5] ${getStatusClasses(
+              eventStatus
+            )}`}
+          >
+            <span className={`w-2 h-2 rounded-full mr-2 ${getDotColor(eventStatus)}`} />
+            {eventStatus === "Diblokir" ? (
+              <span>Diblokir (Hubungi Admin)</span>
+            ) : (
               <select
                 value={eventStatus}
-                onChange={(e) =>
-                  handleStatusChange(e.target.value as EventStatus)
-                }
+                onChange={(e) => handleStatusChange(e.target.value as EventStatus)}
                 className="bg-transparent border-none outline-none text-xs font-semibold pr-2 cursor-pointer appearance-none"
               >
                 <option value="Draf">Draf</option>
@@ -258,10 +258,10 @@ const EventDetailPage = () => {
                 <option value="Selesai">Selesai</option>
                 <option value="Dibatalkan">Dibatalkan</option>
               </select>
-            </div>
-          )}
+            )}
+          </div>
 
-          {/* EDIT BUTTON (FUNGSIONAL) */}
+          {/* EDIT BUTTON */}
           <Link
             href={`/dashboard/event/${id}/edit`}
             className="hidden md:inline-flex items-center gap-2 rounded-full border border-[#E4E7F5] bg-white/80 text-[#344270] px-4 py-2 text-xs md:text-sm font-semibold hover:bg-white transition"
@@ -269,7 +269,7 @@ const EventDetailPage = () => {
             Edit Event
           </Link>
 
-          {/* Wrapper titik tiga + menu */}
+          {/* MORE MENU */}
           <div className="relative">
             <button
               type="button"
@@ -300,7 +300,7 @@ const EventDetailPage = () => {
                 </Link>
 
                 <Link
-                  href={`/events/${id}`} // Arahkan ke public page yang sebenarnya
+                  href={`/events/${id}`}
                   target="_blank"
                   onClick={() => setMenuOpen(false)}
                   className="flex items-center gap-2 w-full px-4 py-2.5 text-xs md:text-sm text-[#344270cc] hover:bg-[#F5F6FF]"
@@ -314,13 +314,12 @@ const EventDetailPage = () => {
         </div>
       </div>
 
-      {/* 2 Kolom: Info event + ringkasan */}
+      {/* --- GRID UTAMA --- */}
       <section className="grid md:grid-cols-3 gap-4 md:gap-6">
-        {/* Info Event (Dinamis) */}
+        
+        {/* KOLOM 1: INFO EVENT */}
         <div className="md:col-span-2 rounded-3xl bg-white/90 border border-white/70 backdrop-blur-2xl shadow-[0_16px_45px_rgba(0,0,0,0.08)] px-5 md:px-6 py-5 md:py-6">
-          <h2 className="text-sm font-semibold text-[#34427099] mb-3">
-            Info Event
-          </h2>
+          <h2 className="text-sm font-semibold text-[#34427099] mb-3">Info Event</h2>
           <div className="space-y-3 text-sm md:text-[15px] text-[#344270cc]">
             <div className="flex items-start gap-3">
               <Calendar className="w-4 h-4 text-[#50A3FB] mt-[2px]" />
@@ -344,7 +343,6 @@ const EventDetailPage = () => {
               <Clock className="w-4 h-4 text-[#50A3FB] mt-[2px]" />
               <div>
                 <p className="text-xs text-[#34427099]">Durasi</p>
-                {/* Duration tidak ada di DB, kita hardcode atau hitung nanti */}
                 <p className="font-medium text-[#344270]">Sesuai jadwal</p>
               </div>
             </div>
@@ -354,26 +352,22 @@ const EventDetailPage = () => {
               <div>
                 <p className="text-xs text-[#34427099]">Harga Tiket</p>
                 <p className="font-medium text-[#344270]">
-                  {event.price === 0
-                    ? "Gratis"
-                    : `Rp ${event.price.toLocaleString("id-ID")}`}
+                  {event.price === 0 ? "Gratis" : `Rp ${event.price.toLocaleString("id-ID")}`}
                 </p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Ringkasan Peserta (Dinamis dari state/dummy) */}
+        {/* KOLOM 2: RINGKASAN PESERTA (STATS) */}
         <div className="rounded-3xl bg-white/90 border border-white/70 backdrop-blur-2xl shadow-[0_16px_45px_rgba(0,0,0,0.08)] px-5 md:px-6 py-5 md:py-6 flex flex-col justify-between gap-4">
           <div>
-            <h2 className="text-sm font-semibold text-[#34427099] mb-3">
-              Ringkasan Peserta
-            </h2>
+            <h2 className="text-sm font-semibold text-[#34427099] mb-3">Ringkasan Peserta</h2>
             <div className="space-y-3 text-sm md:text-[15px] text-[#344270cc]">
               <div className="flex items-center justify-between">
                 <span>Total Terdaftar</span>
                 <span className="font-semibold text-[#344270]">
-                  {registeredCount}/{quota}
+                  {registeredCount}/{quota > 0 ? quota : "∞"}
                 </span>
               </div>
               <div className="flex items-center justify-between">
@@ -385,7 +379,7 @@ const EventDetailPage = () => {
               <div className="flex items-center justify-between">
                 <span>Menunggu pembayaran</span>
                 <span className="font-semibold text-[#F97316]">
-                  {registeredCount - verifiedCount} peserta
+                  {pendingCount} peserta
                 </span>
               </div>
             </div>
@@ -393,6 +387,7 @@ const EventDetailPage = () => {
 
           <button
             type="button"
+            onClick={() => alert("Fitur export CSV akan segera tersedia!")}
             className="mt-2 inline-flex items-center justify-center w-full rounded-2xl pastel-gradient text-[#344270] font-semibold text-sm py-2.5 shadow-[0_12px_30px_rgba(148,163,216,0.45)] hover:opacity-95 transition"
           >
             <Download className="w-4 h-4 mr-2" />
@@ -402,30 +397,19 @@ const EventDetailPage = () => {
           <button
             type="button"
             disabled={sendingFeedback}
-            onClick={() => {
-              setFeedbackInfo(null);
-              setSendingFeedback(true);
-              setTimeout(() => {
-                setSendingFeedback(false);
-                setFeedbackInfo(
-                  "Link feedback dikirim ke semua peserta (dummy)."
-                );
-              }, 800);
-            }}
+            onClick={handleSendFeedback}
             className="w-full md:w-auto mt-3 inline-flex items-center justify-center rounded-2xl bg-white text-[#344270] border border-[#E4E7F5] px-4 py-2.5 text-xs md:text-sm font-semibold hover:bg-[#F5F6FF] disabled:opacity-60 disabled:cursor-not-allowed transition"
           >
-            {sendingFeedback
-              ? "Mengirim link..."
-              : "Kirim Link Feedback ke Peserta"}
+            {sendingFeedback ? "Mengirim..." : "Kirim Link Feedback"}
           </button>
 
           {feedbackInfo && (
-            <p className="mt-2 text-[11px] text-[#34427080]">{feedbackInfo}</p>
+            <p className="mt-2 text-[11px] text-[#34427080] animate-pulse">{feedbackInfo}</p>
           )}
         </div>
       </section>
 
-      {/* Tim Presensi */}
+      {/* --- TIM PRESENSI (SCANNER TEAM) --- */}
       <section className="rounded-3xl bg-white/90 border border-white/70 backdrop-blur-2xl shadow-[0_16px_45px_rgba(0,0,0,0.08)] px-4 md:px-6 py-5 md:py-6 mt-4 md:mt-6">
         <div className="flex items-center justify-between mb-3">
           <div>
@@ -439,54 +423,47 @@ const EventDetailPage = () => {
         </div>
 
         <div className="space-y-3 mb-4 text-sm text-[#344270cc]">
-          {/* Owner (Dinamis dari session) */}
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-semibold text-[#344270]">
-                {currentUser?.name || "Organizer"}
-              </p>
-              <p className="text-[11px] text-[#34427080]">
-                {currentUser?.email} • Organizer
-              </p>
+          {/* List Scanners */}
+          {scanners.map((scanner) => (
+            <div key={scanner.id} className="flex items-center justify-between">
+              <div>
+                <p className="font-semibold text-[#344270]">
+                  {scanner.email.split('@')[0]} {/* Ambil nama depan dari email */}
+                </p>
+                <p className="text-[11px] text-[#34427080]">
+                  {scanner.email} • {scanner.role === "Owner" ? "Organizer" : "Petugas Scan"}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                {scanner.role === "Owner" ? (
+                  <span className="rounded-full bg-[#E0F4FF] text-[#2563EB] text-[11px] px-3 py-1 font-semibold">
+                    OWNER
+                  </span>
+                ) : (
+                  <>
+                    <span className="rounded-full bg-[#FEF3C7] text-[#D97706] text-[11px] px-3 py-1 font-semibold">
+                      SCANNER
+                    </span>
+                    <button
+                      onClick={() => handleRemoveScanner(scanner.id)}
+                      className="p-2 rounded-xl text-[#34427080] hover:bg-red-50 hover:text-red-500 transition"
+                      title="Hapus Petugas"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="rounded-full bg-[#E0F4FF] text-[#2563EB] text-[11px] px-3 py-1 font-semibold">
-                OWNER
-              </span>
-            </div>
-          </div>
-
-          {/* Dummy Scanner */}
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-semibold text-[#344270]">Petugas Scan 1</p>
-              <p className="text-[11px] text-[#34427080]">
-                scan1@example.com • Petugas Scan
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="rounded-full bg-[#FEF3C7] text-[#D97706] text-[11px] px-3 py-1 font-semibold">
-                SCANNER
-              </span>
-              <button
-                onClick={() => alert("Dummy: Petugas dihapus.")}
-                className="p-2 rounded-xl text-[#34427080] hover:bg-red-50 hover:text-red-500 transition"
-              >
-                <TrashIcon />
-              </button>
-            </div>
-          </div>
+          ))}
         </div>
 
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            alert("Dummy: invite dikirim.");
-          }}
-          className="flex flex-col md:flex-row gap-2 md:gap-3"
-        >
+        {/* Form Tambah Petugas */}
+        <form onSubmit={handleAddScanner} className="flex flex-col md:flex-row gap-2 md:gap-3">
           <input
             type="email"
+            value={newScannerEmail}
+            onChange={(e) => setNewScannerEmail(e.target.value)}
             placeholder="Email petugas scan..."
             className="flex-1 rounded-2xl border border-[#E4E7F5] bg-white/80 px-4 py-2.5 text-sm text-[#344270] placeholder:text-[#34427066] focus:outline-none focus:ring-2 focus:ring-[#50A3FB]/60 focus:border-transparent"
           />
@@ -499,7 +476,7 @@ const EventDetailPage = () => {
         </form>
       </section>
 
-      {/* Peserta Terbaru (Table) */}
+      {/* --- TABEL PESERTA TERBARU (REAL DATA) --- */}
       <section className="rounded-[28px] bg-white/90 border border-white/70 backdrop-blur-2xl shadow-[0_16px_45px_rgba(0,0,0,0.08)] px-4 md:px-6 lg:px-8 py-5 md:py-6 mt-4 md:mt-6">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
@@ -524,34 +501,41 @@ const EventDetailPage = () => {
               <tr className="border-b border-[#E4E7F5] text-left">
                 <th className="py-3 md:py-4 pr-4 font-semibold">Nama</th>
                 <th className="py-3 md:py-4 pr-4 font-semibold">Email</th>
-                <th className="py-3 md:py-4 pr-4 font-semibold">Tipe Tiket</th>
+                <th className="py-3 md:py-4 pr-4 font-semibold">Nominal</th>
                 <th className="py-3 md:py-4 pr-4 font-semibold">Status</th>
               </tr>
             </thead>
             <tbody>
-              {participants.map((p) => (
+              {orders.slice(0, 5).map((order) => (
                 <tr
-                  key={p.id}
+                  key={order.id}
                   className="border-b border-[#F0F2FF] last:border-0"
                 >
-                  <td className="py-3 md:py-4 pr-4">{p.name}</td>
-                  <td className="py-3 md:py-4 pr-4">{p.email}</td>
-                  <td className="py-3 md:py-4 pr-4">{p.ticketType}</td>
                   <td className="py-3 md:py-4 pr-4">
-                    {p.status === "paid" ? (
+                    {order.participant?.name || "Tanpa Nama"}
+                  </td>
+                  <td className="py-3 md:py-4 pr-4">
+                    {order.participant?.email || "-"}
+                  </td>
+                  <td className="py-3 md:py-4 pr-4">
+                    Rp {order.amount.toLocaleString("id-ID")}
+                  </td>
+                  <td className="py-3 md:py-4 pr-4">
+                    {["paid", "settlement", "success"].includes(order.status) ? (
                       <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-600">
                         <CheckCircle2 className="w-3 h-3 mr-1" />
                         Lunas
                       </span>
                     ) : (
                       <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold bg-orange-50 text-[#F97316]">
-                        Menunggu
+                        {order.status}
                       </span>
                     )}
                   </td>
                 </tr>
               ))}
-              {participants.length === 0 && (
+
+              {orders.length === 0 && (
                 <tr>
                   <td
                     colSpan={4}
@@ -568,27 +552,5 @@ const EventDetailPage = () => {
     </>
   );
 };
-
-// Helper component icon
-function TrashIcon() {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      className="w-4 h-4"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <polyline points="3 6 5 6 21 6" />
-      <path d="M19 6l-1 14H6L5 6" />
-      <path d="M10 11v6" />
-      <path d="M14 11v6" />
-      <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
-    </svg>
-  );
-}
 
 export default EventDetailPage;
