@@ -4,6 +4,7 @@ import { createAxiosJWT } from "@/lib/axiosJwt";
 
 // Type event sesuai data dari backend kamu
 export interface EventItem {
+  date: string;
   id: string;
   title: string;
   description?: string;
