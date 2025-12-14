@@ -1,4 +1,5 @@
 // app/actions/certificate.ts
+"use server";
 import { createAxiosJWT } from "@/lib/axiosJwt";
 
 export interface EventWithCertBackground {
@@ -100,3 +101,65 @@ export async function issueCertificates(
     return null;
   }
 }
+
+// app/actions/certificate.ts
+// ... (import lain biarkan saja)
+
+// Tambahkan definisi tipe jika belum ada di file lain, atau import dari definitions
+export interface CertificateData {
+  id: string;
+  cert_no: string;
+  issued_at: string;
+  participant: { name: string };
+  event: {
+    title: string;
+    cert_background: string;
+    datetime: string;
+  };
+}
+
+/**
+ * Ambil data sertifikat publik (Server Action)
+ */
+export async function getPublicCertificate(id: string): Promise<CertificateData | null> {
+  try {
+    const baseUrl = process.env.NEXT_PUBLIC_API_SERVER;
+    // Pastikan URL API backend benar
+    const res = await fetch(`${baseUrl}api/events/certificates/${id}/public`, {
+      cache: "no-store",
+    });
+
+    if (!res.ok) {
+      console.error(`Gagal fetch sertifikat: ${res.status} ${res.statusText}`);
+      return null;
+    }
+
+    const data = await res.json();
+
+    // [FIX] Convert background image URL to Base64
+    // Ini mem-bypass masalah CORS pada html2canvas
+    if (data?.event?.cert_background) {
+      data.event.cert_background = await imageToBase64(data.event.cert_background);
+    }
+
+    return data as CertificateData;
+  } catch (error) {
+    console.error("Error fetching certificate:", error);
+    return null;
+  }
+}
+
+async function imageToBase64(url: string): Promise<string> {
+  try {
+    const res = await fetch(url, { cache: 'no-store' });
+    if (!res.ok) throw new Error("Failed to fetch image");
+    const arrayBuffer = await res.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    const contentType = res.headers.get("content-type") || "image/jpeg";
+    return `data:${contentType};base64,${buffer.toString("base64")}`;
+  } catch (error) {
+    console.error("Error converting image to Base64:", error);
+    return url; // Jika gagal, kembalikan URL asli sebagai fallback
+  }
+}
+
