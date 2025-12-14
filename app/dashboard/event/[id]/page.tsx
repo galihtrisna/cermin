@@ -18,17 +18,19 @@ import { useState, useEffect } from "react";
 
 // Import actions
 import { getEventById, updateEvent, type EventItem } from "@/app/actions/event";
-import { getOrdersByEvent, type OrderItem } from "@/app/actions/order"; // Action baru
+import { getOrdersByEvent, type OrderItem } from "@/app/actions/order";
 import { checkUser } from "@/app/actions/auth";
 import type { Users as UserType } from "@/lib/definitions";
+import { createAxiosJWT } from "@/lib/axiosJwt"; // Import axios wrapper
 
 // Status event sesuai DB
 type EventStatus = "Draf" | "Aktif" | "Selesai" | "Diblokir" | "Dibatalkan";
 
-// Tipe untuk Scanner (Frontend-side state sementara)
+// Tipe untuk Scanner
 interface ScannerMember {
-  id: string;
+  id: string; // ID dari tabel event_staff (untuk staff) atau user_id (untuk owner)
   email: string;
+  name?: string; // Tambahan opsi nama biar lebih lengkap (opsional)
   role: "Scanner" | "Owner";
 }
 
@@ -40,10 +42,10 @@ const EventDetailPage = () => {
   // --- STATE DATA ---
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
+
   const [event, setEvent] = useState<EventItem | null>(null);
   const [currentUser, setCurrentUser] = useState<UserType | null>(null);
-  
+
   // Data Peserta (Real dari DB)
   const [orders, setOrders] = useState<OrderItem[]>([]);
 
@@ -53,9 +55,12 @@ const EventDetailPage = () => {
   const [sendingFeedback, setSendingFeedback] = useState(false);
   const [feedbackInfo, setFeedbackInfo] = useState<string | null>(null);
 
-  // State Tim Presensi (Simulasi Frontend karena Backend belum ada tabel Scanner)
+  // State Tim Presensi (Real)
   const [scanners, setScanners] = useState<ScannerMember[]>([]);
   const [newScannerEmail, setNewScannerEmail] = useState("");
+  const [addingScanner, setAddingScanner] = useState(false); // Loading state saat add staff
+
+  const axiosJWT = createAxiosJWT();
 
   // --- FETCH DATA & PROTEKSI ---
   useEffect(() => {
@@ -85,13 +90,30 @@ const EventDetailPage = () => {
         setOrders(ordersData);
         setEventStatus(eventData.status as EventStatus);
 
-        // 4. Set Dummy Scanners (Agar fitur terlihat jalan)
-        // Di real implementation, ini fetch dari tabel event_scanners
-        setScanners([
-          { id: "owner-1", email: userData.email, role: "Owner" },
-          { id: "scanner-1", email: "petugas1@cermin.id", role: "Scanner" }
-        ]);
+        // 4. Fetch Real Staff List
+        // Owner selalu ada di list paling atas
+        const ownerItem: ScannerMember = {
+          id: "owner",
+          email: userData.email, // Asumsi owner adalah current user (jika role superadmin buka, ini perlu disesuaikan tp logic dasar ok)
+          role: "Owner",
+          name: userData.name,
+        };
 
+        try {
+          const res = await axiosJWT.get(`/api/events/${id}/staff`);
+          const staffList = res.data.data.map((item: any) => ({
+            id: item.id, // ID dari tabel event_staff (penting untuk delete)
+            email: item.user.email,
+            name: item.user.name,
+            role: "Scanner" as const,
+          }));
+
+          setScanners([ownerItem, ...staffList]);
+        } catch (staffErr) {
+          console.error("Gagal ambil staff:", staffErr);
+          // Fallback: tetap tampilkan owner
+          setScanners([ownerItem]);
+        }
       } catch (err: any) {
         console.error(err);
         setError("Gagal memuat detail event.");
@@ -104,17 +126,16 @@ const EventDetailPage = () => {
   }, [id, router]);
 
   // --- LOGIC CALCULATIONS ---
-  // Menghitung statistik dari data real
   const quota = event?.capacity || 0;
   const registeredCount = orders.length;
-  const verifiedCount = orders.filter((o) => 
+  const verifiedCount = orders.filter((o) =>
     ["paid", "settlement", "success"].includes(o.status.toLowerCase())
   ).length;
   const pendingCount = registeredCount - verifiedCount;
 
   // --- HANDLERS ---
 
-  // 1. Update Status Event (Real ke Backend)
+  // 1. Update Status Event
   const handleStatusChange = async (newStatus: EventStatus) => {
     if (!event || !id) return;
     setEventStatus(newStatus); // Optimistic UI Update
@@ -128,70 +149,114 @@ const EventDetailPage = () => {
     }
   };
 
-  // 2. Tambah Petugas Scan (Client-side Logic)
-  const handleAddScanner = (e: React.FormEvent) => {
+  // 2. Tambah Petugas Scan (Real API Call)
+  const handleAddScanner = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newScannerEmail.trim()) return;
+    if (!newScannerEmail.trim() || !id) return;
 
-    // Simulasi penambahan
-    const newScanner: ScannerMember = {
-      id: Date.now().toString(),
-      email: newScannerEmail,
-      role: "Scanner"
-    };
+    setAddingScanner(true);
+    try {
+      // Panggil API add staff
+      await axiosJWT.post(`/api/events/${id}/staff`, {
+        email: newScannerEmail,
+      });
 
-    setScanners([...scanners, newScanner]);
-    setNewScannerEmail(""); // Reset input
-    
-    // Feedback visual
-    alert(`Undangan dikirim ke ${newScanner.email} (Simulasi)`);
-  };
+      // Refresh list staff
+      const res = await axiosJWT.get(`/api/events/${id}/staff`);
+      const newStaffList = res.data.data.map((item: any) => ({
+        id: item.id,
+        email: item.user.email,
+        name: item.user.name,
+        role: "Scanner" as const,
+      }));
 
-  // 3. Hapus Petugas Scan (Client-side Logic)
-  const handleRemoveScanner = (scannerId: string) => {
-    if (confirm("Hapus akses petugas ini?")) {
-      setScanners(scanners.filter(s => s.id !== scannerId));
+      // Pertahankan owner di index 0
+      const owner = scanners.find((s) => s.role === "Owner");
+      setScanners(owner ? [owner, ...newStaffList] : [...newStaffList]);
+
+      setNewScannerEmail(""); // Reset input
+      alert(`Undangan berhasil dikirim ke ${newScannerEmail}`);
+    } catch (err: any) {
+      console.error(err);
+      // Tampilkan pesan error spesifik dari backend (misal: "Email belum terdaftar" atau "User bukan staff")
+      const msg = err.response?.data?.message || "Gagal menambahkan petugas.";
+      alert(msg);
+    } finally {
+      setAddingScanner(false);
     }
   };
 
-  // 4. Kirim Feedback (Simulasi)
+  // 3. Hapus Petugas Scan (Real API Call)
+  const handleRemoveScanner = async (scannerId: string) => {
+    if (!id) return;
+    if (confirm("Hapus akses petugas ini?")) {
+      try {
+        // Panggil API delete staff
+        await axiosJWT.delete(`/api/events/${id}/staff/${scannerId}`);
+        // Update state lokal
+        setScanners(scanners.filter((s) => s.id !== scannerId));
+      } catch (err: any) {
+        console.error(err);
+        alert("Gagal menghapus petugas.");
+      }
+    }
+  };
+
+  // 4. Kirim Feedback
   const handleSendFeedback = () => {
     setFeedbackInfo(null);
     setSendingFeedback(true);
     // Simulasi delay API call
     setTimeout(() => {
       setSendingFeedback(false);
-      setFeedbackInfo(`Link feedback berhasil dikirim ke ${verifiedCount} peserta terverifikasi.`);
+      setFeedbackInfo(
+        `Link feedback berhasil dikirim ke ${verifiedCount} peserta terverifikasi.`
+      );
     }, 1000);
   };
 
   // 5. Helper UI
   const getStatusClasses = (status: string) => {
     switch (status?.toLowerCase()) {
-      case "draf": return "bg-slate-100 text-slate-700";
-      case "aktif": return "bg-[#E0F4FF] text-[#2563EB]";
-      case "selesai": return "bg-emerald-50 text-emerald-700";
-      case "diblokir": return "bg-red-50 text-red-600";
-      default: return "bg-slate-100 text-slate-700";
+      case "draf":
+        return "bg-slate-100 text-slate-700";
+      case "aktif":
+        return "bg-[#E0F4FF] text-[#2563EB]";
+      case "selesai":
+        return "bg-emerald-50 text-emerald-700";
+      case "diblokir":
+        return "bg-red-50 text-red-600";
+      default:
+        return "bg-slate-100 text-slate-700";
     }
   };
 
   const getDotColor = (status: string) => {
     switch (status?.toLowerCase()) {
-      case "draf": return "bg-slate-400";
-      case "aktif": return "bg-emerald-500";
-      case "selesai": return "bg-emerald-600";
-      case "diblokir": return "bg-red-500";
-      default: return "bg-slate-400";
+      case "draf":
+        return "bg-slate-400";
+      case "aktif":
+        return "bg-emerald-500";
+      case "selesai":
+        return "bg-emerald-600";
+      case "diblokir":
+        return "bg-red-500";
+      default:
+        return "bg-slate-400";
     }
   };
 
   const formatDate = (isoString: string) => {
     if (!isoString) return "-";
-    return new Date(isoString).toLocaleDateString("id-ID", {
-      day: "numeric", month: "long", year: "numeric",
-      hour: "2-digit", minute: "2-digit",
-    }) + " WIB";
+    return (
+      new Date(isoString).toLocaleDateString("id-ID", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }) + " WIB"
+    );
   };
 
   // --- RENDER VIEW ---
@@ -210,7 +275,10 @@ const EventDetailPage = () => {
       <div className="min-h-[60vh] flex flex-col items-center justify-center text-slate-500 gap-4">
         <AlertTriangle className="w-10 h-10 text-red-400" />
         <p>{error || "Event tidak ditemukan"}</p>
-        <Link href="/dashboard/event" className="text-[#50A3FB] hover:underline">
+        <Link
+          href="/dashboard/event"
+          className="text-[#50A3FB] hover:underline"
+        >
           Kembali ke daftar event
         </Link>
       </div>
@@ -244,13 +312,19 @@ const EventDetailPage = () => {
               eventStatus
             )}`}
           >
-            <span className={`w-2 h-2 rounded-full mr-2 ${getDotColor(eventStatus)}`} />
+            <span
+              className={`w-2 h-2 rounded-full mr-2 ${getDotColor(
+                eventStatus
+              )}`}
+            />
             {eventStatus === "Diblokir" ? (
               <span>Diblokir (Hubungi Admin)</span>
             ) : (
               <select
                 value={eventStatus}
-                onChange={(e) => handleStatusChange(e.target.value as EventStatus)}
+                onChange={(e) =>
+                  handleStatusChange(e.target.value as EventStatus)
+                }
                 className="bg-transparent border-none outline-none text-xs font-semibold pr-2 cursor-pointer appearance-none"
               >
                 <option value="Draf">Draf</option>
@@ -316,10 +390,11 @@ const EventDetailPage = () => {
 
       {/* --- GRID UTAMA --- */}
       <section className="grid md:grid-cols-3 gap-4 md:gap-6">
-        
         {/* KOLOM 1: INFO EVENT */}
         <div className="md:col-span-2 rounded-3xl bg-white/90 border border-white/70 backdrop-blur-2xl shadow-[0_16px_45px_rgba(0,0,0,0.08)] px-5 md:px-6 py-5 md:py-6">
-          <h2 className="text-sm font-semibold text-[#34427099] mb-3">Info Event</h2>
+          <h2 className="text-sm font-semibold text-[#34427099] mb-3">
+            Info Event
+          </h2>
           <div className="space-y-3 text-sm md:text-[15px] text-[#344270cc]">
             <div className="flex items-start gap-3">
               <Calendar className="w-4 h-4 text-[#50A3FB] mt-[2px]" />
@@ -352,7 +427,9 @@ const EventDetailPage = () => {
               <div>
                 <p className="text-xs text-[#34427099]">Harga Tiket</p>
                 <p className="font-medium text-[#344270]">
-                  {event.price === 0 ? "Gratis" : `Rp ${event.price.toLocaleString("id-ID")}`}
+                  {event.price === 0
+                    ? "Gratis"
+                    : `Rp ${event.price.toLocaleString("id-ID")}`}
                 </p>
               </div>
             </div>
@@ -362,7 +439,9 @@ const EventDetailPage = () => {
         {/* KOLOM 2: RINGKASAN PESERTA (STATS) */}
         <div className="rounded-3xl bg-white/90 border border-white/70 backdrop-blur-2xl shadow-[0_16px_45px_rgba(0,0,0,0.08)] px-5 md:px-6 py-5 md:py-6 flex flex-col justify-between gap-4">
           <div>
-            <h2 className="text-sm font-semibold text-[#34427099] mb-3">Ringkasan Peserta</h2>
+            <h2 className="text-sm font-semibold text-[#34427099] mb-3">
+              Ringkasan Peserta
+            </h2>
             <div className="space-y-3 text-sm md:text-[15px] text-[#344270cc]">
               <div className="flex items-center justify-between">
                 <span>Total Terdaftar</span>
@@ -404,7 +483,9 @@ const EventDetailPage = () => {
           </button>
 
           {feedbackInfo && (
-            <p className="mt-2 text-[11px] text-[#34427080] animate-pulse">{feedbackInfo}</p>
+            <p className="mt-2 text-[11px] text-[#34427080] animate-pulse">
+              {feedbackInfo}
+            </p>
           )}
         </div>
       </section>
@@ -417,7 +498,8 @@ const EventDetailPage = () => {
               Tim Presensi & Akses Scan
             </h2>
             <p className="text-[11px] md:text-xs text-[#34427080]">
-              Undang akun lain untuk membantu scan QR saat check-in.
+              Undang akun staff lain (role: Staff) untuk membantu scan QR saat
+              check-in.
             </p>
           </div>
         </div>
@@ -428,10 +510,11 @@ const EventDetailPage = () => {
             <div key={scanner.id} className="flex items-center justify-between">
               <div>
                 <p className="font-semibold text-[#344270]">
-                  {scanner.email.split('@')[0]} {/* Ambil nama depan dari email */}
+                  {scanner.name || scanner.email.split("@")[0]}
                 </p>
                 <p className="text-[11px] text-[#34427080]">
-                  {scanner.email} • {scanner.role === "Owner" ? "Organizer" : "Petugas Scan"}
+                  {scanner.email} •{" "}
+                  {scanner.role === "Owner" ? "Organizer" : "Petugas Scan"}
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -459,19 +542,23 @@ const EventDetailPage = () => {
         </div>
 
         {/* Form Tambah Petugas */}
-        <form onSubmit={handleAddScanner} className="flex flex-col md:flex-row gap-2 md:gap-3">
+        <form
+          onSubmit={handleAddScanner}
+          className="flex flex-col md:flex-row gap-2 md:gap-3"
+        >
           <input
             type="email"
             value={newScannerEmail}
             onChange={(e) => setNewScannerEmail(e.target.value)}
-            placeholder="Email petugas scan..."
+            placeholder="Email staff yang sudah terdaftar..."
             className="flex-1 rounded-2xl border border-[#E4E7F5] bg-white/80 px-4 py-2.5 text-sm text-[#344270] placeholder:text-[#34427066] focus:outline-none focus:ring-2 focus:ring-[#50A3FB]/60 focus:border-transparent"
           />
           <button
             type="submit"
-            className="rounded-2xl bg-[#50A3FB] text-white text-sm font-semibold px-4 md:px-5 py-2.5 shadow-[0_10px_26px_rgba(80,163,251,0.55)] hover:opacity-95 transition"
+            disabled={addingScanner}
+            className="rounded-2xl bg-[#50A3FB] text-white text-sm font-semibold px-4 md:px-5 py-2.5 shadow-[0_10px_26px_rgba(80,163,251,0.55)] hover:opacity-95 transition disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            Tambah Petugas
+            {addingScanner ? "Menambahkan..." : "Tambah Petugas"}
           </button>
         </form>
       </section>
@@ -521,7 +608,9 @@ const EventDetailPage = () => {
                     Rp {order.amount.toLocaleString("id-ID")}
                   </td>
                   <td className="py-3 md:py-4 pr-4">
-                    {["paid", "settlement", "success"].includes(order.status) ? (
+                    {["paid", "settlement", "success"].includes(
+                      order.status
+                    ) ? (
                       <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-600">
                         <CheckCircle2 className="w-3 h-3 mr-1" />
                         Lunas
