@@ -34,7 +34,7 @@ export default function PublicCertificatePage() {
   // 1. Fetch Data
   useEffect(() => {
     // Ganti dengan URL API backend Anda
-    fetch(`${process.env.NEXT_PUBLIC_API_URL}/events/certificates/${id}/public`)
+    fetch(`${process.env.NEXT_PUBLIC_API_SERVER}api/events/certificates/${id}/public`)
       .then((res) => {
         if (!res.ok) throw new Error("Not Found");
         return res.json();

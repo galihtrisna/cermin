@@ -24,7 +24,10 @@ export async function getEventCertificateSettings(
   try {
     const axiosJWT = createAxiosJWT();
     const res = await axiosJWT.get(`/api/events/${eventId}`);
-    return res.data as EventWithCertBackground;
+
+    // [FIX] Tambahkan .data untuk mengambil objek event yang sebenarnya
+    // Karena struktur response backend adalah: { message: "Success", data: { ... } }
+    return res.data?.data as EventWithCertBackground;
   } catch (error) {
     console.error("getEventCertificateSettings error:", error);
     return null;
