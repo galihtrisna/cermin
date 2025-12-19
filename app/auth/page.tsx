@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, FormEvent, useEffect } from "react";
+import { useState, FormEvent, useEffect, Suspense } from "react";
 import Link from "next/link";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
 import Image from "next/image";
 import { useSearchParams, useRouter } from "next/navigation";
 import { signIn, registerUser, checkUser } from "@/app/actions/auth";
@@ -30,7 +30,8 @@ interface FormErrors {
   general?: string;
 }
 
-const AuthPage = () => {
+// 1. KITA UBAH NAMA KOMPONEN UTAMA YANG LAMA MENJADI "AuthContent"
+const AuthContent = () => {
   const searchParams = useSearchParams();
   const router = useRouter();
 
@@ -409,6 +410,21 @@ const AuthPage = () => {
         </section>
       </div>
     </main>
+  );
+};
+
+// 2. KITA BUAT WRAPPER BARU AGAR LOLOS BUILD VERCEL
+const AuthPage = () => {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          <Loader2 className="w-8 h-8 animate-spin text-[#50A3FB]" />
+        </div>
+      }
+    >
+      <AuthContent />
+    </Suspense>
   );
 };
 
