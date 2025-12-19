@@ -2,7 +2,7 @@
 
 import { createAxiosJWT } from "@/lib/axiosJwt";
 
-// Type event sesuai data dari backend kamu
+// Type event sesuai data dari backend
 export interface EventItem {
   date: string;
   id: string;
@@ -13,16 +13,16 @@ export interface EventItem {
   capacity: number;
   price: number;
   status: string;
-  owner_id: string; // Penting untuk otorisasi
-  image?: string; // Jika backend support
+  owner_id: string;
+  image?: string;
 }
 
 // Payload untuk create/update event
 export interface EventPayload {
   title: string;
   organizer: string;
-  date?: string; // ini legacy frontend, backend pakainya datetime
-  datetime?: string; // tambahkan ini agar sesuai backend
+  date?: string;
+  datetime?: string;
   location: string;
   image?: string;
   description?: string;
@@ -42,7 +42,7 @@ export interface EventRow {
 
 export interface ParticipantOrder {
   id: string;
-  status: string; // paid, pending
+  status: string;
   created_at: string;
   participant: {
     id: string;
@@ -50,7 +50,6 @@ export interface ParticipantOrder {
     email: string;
     phone: string;
   };
-  // Tambahkan field lain sesuai respon API orders
 }
 
 // =======================
@@ -59,14 +58,8 @@ export interface ParticipantOrder {
 export async function getAllEvents(): Promise<EventItem[]> {
   try {
     const axiosJWT = await createAxiosJWT();
-
-    // Endpoint REST API kamu → GET /api/events
     const response = await axiosJWT.get("/api/events");
-
-    // Asumsi struktur dari backend:
-    // { message: "...", data: [...] }
     const { data } = response.data;
-
     return data as EventItem[];
   } catch (error) {
     console.error("getAllEvents error:", error);
@@ -94,13 +87,8 @@ export async function getEventById(id: string): Promise<EventItem> {
 export async function createEvent(payload: EventPayload): Promise<EventItem> {
   try {
     const axiosJWT = await createAxiosJWT();
-
-    // POST /api/events
     const response = await axiosJWT.post("/api/events", payload);
-
-    // Asumsi: { message: "...", data: { ...eventBaru } }
     const { data } = response.data;
-
     return data as EventItem;
   } catch (error) {
     console.error("createEvent error:", error);
@@ -131,11 +119,7 @@ export async function updateEvent(
 export async function deleteEvent(id: string): Promise<void> {
   try {
     const axiosJWT = await createAxiosJWT();
-
-    // DELETE /api/events/:id
     await axiosJWT.delete(`/api/events/${id}`);
-
-    // kalau backend kirim { message }, kamu bisa return message juga kalau mau
   } catch (error) {
     console.error("deleteEvent error:", error);
     throw error;
@@ -153,19 +137,43 @@ export async function getEventOrders(
 ): Promise<ParticipantOrder[]> {
   try {
     const axiosJWT = await createAxiosJWT();
-    // Panggil endpoint orders dengan filter event_id & expand participant
     const response = await axiosJWT.get(`/api/orders`, {
       params: {
         event_id: eventId,
         expand: true,
-        limit: 1000, // Ambil banyak sekalian untuk rekap
+        limit: 1000,
       },
     });
-
-    // API order.controller mengembalikan { data: [...] }
     return response.data.data as ParticipantOrder[];
   } catch (error) {
     console.error("getEventOrders error:", error);
     return [];
+  }
+}
+
+// =======================
+// UPLOAD: Upload Gambar ke Backend
+// =======================
+export async function uploadEventImage(file: File): Promise<string> {
+  try {
+    const axiosJWT = await createAxiosJWT();
+    const formData = new FormData();
+    // Key 'file' harus sesuai dengan yang diminta backend (upload.route.js / multer)
+    formData.append("file", file);
+
+    // POST /api/upload/image
+    const response = await axiosJWT.post("/api/upload/image", formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+
+    // Backend mengembalikan { message, url }
+    return response.data.url;
+  } catch (error: any) {
+    console.error("Upload image error:", error);
+    // Ambil pesan error dari backend jika ada
+    const msg = error?.response?.data?.message || "Gagal mengunggah gambar.";
+    throw new Error(msg);
   }
 }
