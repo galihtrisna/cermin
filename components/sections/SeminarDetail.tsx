@@ -5,12 +5,10 @@ import Image from "next/image";
 import { Calendar, MapPin, Users, Clock, Award } from "lucide-react";
 import { EventItem } from "@/app/actions/event";
 
-// Kita perluas tipe EventItem sementara untuk mengakomodasi field baru
-// yang nanti akan Anda tambahkan di database.
 interface ExtendedEventItem extends EventItem {
   subtitle?: string;
   duration?: string;
-  benefits?: string[]; // Array of strings
+  benefits?: string[];
   image?: string;
 }
 
@@ -40,14 +38,14 @@ const SeminarDetailPage = ({ event }: SeminarDetailProps) => {
           minimumFractionDigits: 0,
         }).format(event.price);
 
-  // 3. Fallback Data (Jika di database belum diisi/dibuat kolomnya)
+  // 3. Fallback Data
   const displayImage = event.image || "/seminar-illustration.jpg";
   const displaySubtitle = event.subtitle || "Deskripsi singkat belum tersedia.";
-  const displayDuration = event.duration || "-"; // Nanti isi di DB misal "4 Jam"
+  const displayDuration = event.duration || "-";
   const displayBenefits =
     event.benefits && event.benefits.length > 0
       ? event.benefits
-      : ["Materi Eksklusif", "E-Sertifikat", "Networking"]; // Default benefit
+      : ["Materi Eksklusif", "E-Sertifikat", "Networking"];
 
   return (
     <div className="min-h-screen">
@@ -72,6 +70,8 @@ const SeminarDetailPage = ({ event }: SeminarDetailProps) => {
                 fill
                 className="object-cover"
                 priority
+                // [FIX] Tambahkan sizes untuk performa & menghilangkan warning
+                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 100vw, 100vw"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
             </div>
@@ -112,7 +112,7 @@ const SeminarDetailPage = ({ event }: SeminarDetailProps) => {
                   </div>
                 </div>
 
-                {/* Kapasitas (Menggantikan 'Participants' karena itu butuh query count terpisah) */}
+                {/* Kapasitas */}
                 <div className="flex items-center gap-3 rounded-2xl bg-white/80 border border-white/70 px-4 py-3">
                   <Users className="w-5 h-5 text-[#50A3FB]" />
                   <div>
@@ -135,7 +135,7 @@ const SeminarDetailPage = ({ event }: SeminarDetailProps) => {
                 </div>
               </div>
 
-              {/* Tentang Seminar (Description) */}
+              {/* Tentang Seminar */}
               <section className="rounded-2xl bg-white/85 border border-white/60 px-4 py-5 md:px-6 md:py-6 shadow-[0_4px_15px_rgba(0,0,0,0.04)]">
                 <h2 className="text-xl md:text-2xl font-semibold mb-3 text-[#344270]">
                   Tentang Seminar
@@ -175,7 +175,6 @@ const SeminarDetailPage = ({ event }: SeminarDetailProps) => {
                     </p>
                   </div>
 
-                  {/* Link ke halaman Register dengan ID yang benar */}
                   <Link
                     href={`/events/register/${event.id}`}
                     className="

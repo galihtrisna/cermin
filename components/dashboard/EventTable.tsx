@@ -2,19 +2,61 @@
 "use client";
 
 import Link from "next/link";
-import { Edit2, Trash2 } from "lucide-react";
+import { Edit2, Trash2, Loader2 } from "lucide-react"; 
+import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { deleteEvent } from "@/app/actions/event";
 
 export interface EventRow {
   id: string;
   title: string;
-  datetime?: string; // Sesuaikan dengan API
-  date?: string; // Legacy support
+  datetime?: string;
+  date?: string;
   price: number;
-  participants?: string; // Opsional jika data belum ada
+  participants?: string;
   status: string;
 }
 
 const EventTable = ({ events }: { events: EventRow[] }) => {
+  const router = useRouter();
+  
+  // 1. Inisialisasi state lokal dengan data dari props
+  const [localEvents, setLocalEvents] = useState<EventRow[]>(events);
+  const [loadingId, setLoadingId] = useState<string | null>(null);
+
+  // 2. Sinkronisasi: Jika props 'events' berubah (misal paginasi), update state lokal
+  useEffect(() => {
+    setLocalEvents(events);
+  }, [events]);
+
+  const handleDelete = async (id: string) => {
+    const confirmed = window.confirm(
+      "Apakah Anda yakin ingin menghapus event ini? Data yang dihapus tidak dapat dikembalikan."
+    );
+    if (!confirmed) return;
+
+    setLoadingId(id);
+
+    try {
+      // 3. Panggil API Delete di Server
+      await deleteEvent(id);
+
+      // 4. UPDATE INSTAN: Hapus item dari state lokal agar langsung hilang dari layar
+      // Kita tidak menunggu router.refresh() selesai
+      setLocalEvents((prevEvents) => prevEvents.filter((event) => event.id !== id));
+
+      // 5. Refresh data server di background untuk konsistensi jangka panjang
+      router.refresh();
+
+    } catch (error) {
+      console.error("Gagal menghapus event:", error);
+      alert("Gagal menghapus event. Silakan coba lagi.");
+      // Jika gagal, item tidak jadi dihapus dari state, jadi user tetap melihatnya
+    } finally {
+      setLoadingId(null);
+    }
+  };
+
   return (
     <section
       className="
@@ -46,8 +88,9 @@ const EventTable = ({ events }: { events: EventRow[] }) => {
             </tr>
           </thead>
 
+          {/* RENDER DARI STATE LOKAL (localEvents), BUKAN PROPS (events) */}
           <tbody>
-            {events.map((event) => (
+            {localEvents.map((event) => (
               <tr
                 key={event.id}
                 className="border-b border-[#F0F2FF] last:border-0"
@@ -56,7 +99,6 @@ const EventTable = ({ events }: { events: EventRow[] }) => {
                   {event.title}
                 </td>
                 <td className="py-3 md:py-4 pr-4">
-                  {/* Gunakan datetime jika ada, fallback ke date */}
                   {event.datetime
                     ? new Date(event.datetime).toLocaleDateString("id-ID", {
                         day: "numeric",
@@ -87,7 +129,6 @@ const EventTable = ({ events }: { events: EventRow[] }) => {
                 </td>
                 <td className="py-3 md:py-4 pr-2">
                   <div className="flex items-center justify-center gap-3 text-[#344270b3]">
-                    {/* EDIT BUTTON: Mengarah ke Detail Page sesuai request */}
                     <Link
                       href={`/dashboard/event/${event.id}`}
                       className="hover:text-[#50A3FB] transition"
@@ -96,15 +137,24 @@ const EventTable = ({ events }: { events: EventRow[] }) => {
                       <Edit2 className="w-4 h-4" />
                     </Link>
                     
-                    <button className="hover:text-red-500 transition">
-                      <Trash2 className="w-4 h-4" />
+                    <button 
+                      onClick={() => handleDelete(event.id)}
+                      disabled={loadingId === event.id}
+                      className="hover:text-red-500 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Hapus Event"
+                    >
+                      {loadingId === event.id ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-4 h-4" />
+                      )}
                     </button>
                   </div>
                 </td>
               </tr>
             ))}
 
-            {events.length === 0 && (
+            {localEvents.length === 0 && (
               <tr>
                 <td colSpan={5} className="py-6 text-center text-[#34427099]">
                   Belum ada event.
