@@ -10,10 +10,11 @@ import {
   LogOut,
   Calendar,
   Users as UsersIcon,
+  PlusCircle, // Tambahkan icon Plus
 } from "lucide-react";
 
 interface SidebarProps {
-  role: string;       // <---- SIMPLE: biarin string aja
+  role: string;
   onLogout: () => void;
 }
 
@@ -27,7 +28,10 @@ const navMap: Record<string, any[]> = {
 
   admin: [
     { label: "Overview", href: "/dashboard", icon: LayoutDashboard },
+    // Arahkan ke halaman LIST
     { label: "Event Saya", href: "/dashboard/event", icon: Calendar },
+    // Tambahkan menu baru untuk CREATE
+    { label: "Buat Event", href: "/dashboard/event/new", icon: PlusCircle }, 
     { label: "Sertifikat", href: "/dashboard/certificates", icon: Award },
     { label: "Pengaturan", href: "/dashboard/settings", icon: Settings },
   ],
@@ -41,7 +45,6 @@ const navMap: Record<string, any[]> = {
   ],
 };
 
-// fallback kalau role unknown → staff
 const getNavItems = (role: string) => navMap[role] ?? navMap["staff"];
 
 export default function DashboardSidebar({ role, onLogout }: SidebarProps) {
@@ -49,20 +52,7 @@ export default function DashboardSidebar({ role, onLogout }: SidebarProps) {
   const navItems = getNavItems(role);
 
   return (
-    <aside
-      className="
-        w-60 lg:w-64
-        flex-col
-        bg-white/10
-        border border-white/50
-        rounded-3xl
-        backdrop-blur-2xl
-        shadow-[0_18px_45px_rgba(15,23,42,0.22)]
-        p-4 md:p-5
-        h-fit
-        sticky top-28
-      "
-    >
+    <aside className="w-60 lg:w-64 flex-col bg-white/10 border border-white/50 rounded-3xl backdrop-blur-2xl shadow-[0_18px_45px_rgba(15,23,42,0.22)] p-4 md:p-5 h-fit sticky top-28 hidden md:flex">
       <div className="mb-4 px-1">
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#34427080]">
           Dashboard
@@ -72,8 +62,7 @@ export default function DashboardSidebar({ role, onLogout }: SidebarProps) {
       <nav className="flex-1 space-y-2">
         {navItems.map((item) => {
           const Icon = item.icon;
-          const active =
-            pathname === item.href || pathname?.startsWith(item.href + "/");
+          const active = pathname === item.href; // Ubah logic active agar sub-route tidak otomatis menyalakan parent jika tidak diinginkan, atau biarkan default
 
           return (
             <Link
@@ -95,11 +84,7 @@ export default function DashboardSidebar({ role, onLogout }: SidebarProps) {
                 className={`
                   inline-flex items-center justify-center
                   w-8 h-8 rounded-xl
-                  ${
-                    active
-                      ? "bg-white/40"
-                      : "bg-white/70 text-[#50A3FB]"
-                  }
+                  ${active ? "bg-white/40" : "bg-white/70 text-[#50A3FB]"}
                 `}
               >
                 <Icon className="w-4 h-4" />
@@ -113,14 +98,7 @@ export default function DashboardSidebar({ role, onLogout }: SidebarProps) {
       <button
         type="button"
         onClick={onLogout}
-        className="
-          mt-4 flex items-center gap-2
-          px-3 py-2 rounded-2xl
-          text-xs font-medium
-          text-[#34427099]
-          hover:bg-white/30 hover:text-red-500
-          transition
-        "
+        className="mt-4 flex items-center gap-2 px-3 py-2 rounded-2xl text-xs font-medium text-[#34427099] hover:bg-white/30 hover:text-red-500 transition"
       >
         <span className="inline-flex w-7 h-7 rounded-xl bg-white/70 items-center justify-center">
           <LogOut className="w-4 h-4" />

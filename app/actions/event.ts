@@ -177,3 +177,4 @@ export async function uploadEventImage(file: File): Promise<string> {
     throw new Error(msg);
   }
 }
+
