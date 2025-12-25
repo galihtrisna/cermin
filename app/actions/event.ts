@@ -34,9 +34,12 @@ export interface EventPayload {
 export interface EventRow {
   id: string;
   title: string;
-  date: string;
+  date: string;       // string tanggal display
+  datetime?: string;  // string ISO untuk kalkulasi
   price: number;
-  participants: string;
+  participants: string; // "Terisi / Kapasitas"
+  participant_count?: number; // Raw number dari backend
+  capacity?: number;
   status: string;
 }
 
@@ -129,7 +132,24 @@ export async function deleteEvent(id: string): Promise<void> {
 export async function getMyEvents(): Promise<EventRow[]> {
   const axiosJWT = await createAxiosJWT();
   const response = await axiosJWT.get("/api/events/mine");
-  return response.data.data as EventRow[];
+  
+  // Mapping response backend ke format EventRow
+  const rawData = response.data.data;
+  
+  return rawData.map((item: any) => ({
+    id: item.id,
+    title: item.title,
+    datetime: item.datetime,
+    date: new Date(item.datetime).toLocaleDateString("id-ID", {
+        day: "numeric", month: "long", year: "numeric"
+    }),
+    price: item.price,
+    // Format "Terisi / Kapasitas"
+    participants: `${item.participant_count || 0}/${item.capacity}`,
+    participant_count: item.participant_count || 0,
+    capacity: item.capacity,
+    status: item.status
+  }));
 }
 
 export async function getEventOrders(
